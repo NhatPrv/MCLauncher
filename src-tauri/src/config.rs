@@ -26,7 +26,7 @@ impl Default for AppConfig {
             java_path,
             resolution_width: 854,
             resolution_height: 480,
-            jvm_args: "-XX:+UseG1GC -Dsun.rbac.debug=false".to_string(),
+            jvm_args: "-XX:+UseG1GC".to_string(),
             game_dir,
             theme: "dark".to_string(),
         }
@@ -73,33 +73,50 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
+/// Tìm kiếm ưu tiên các đường dẫn Java 17 / Java 21 trên hệ thống Windows
 pub fn detect_java_path() -> Option<String> {
-    // Check JAVA_HOME environment variable
+    // 1. Kiểm tra JAVA_HOME nếu có
     if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java_exe = PathBuf::from(java_home).join("bin").join("java.exe");
+        let java_exe = PathBuf::from(&java_home).join("bin").join("java.exe");
         if java_exe.exists() {
             return Some(java_exe.to_string_lossy().to_string());
         }
     }
-    // Common Windows Program Files locations
+
+    // 2. Danh sách các đường dẫn cài JDK phổ biến trên Windows
     let paths = vec![
         r"C:\Program Files\Java",
-        r"C:\Program Files (x86)\Java",
         r"C:\Program Files\Eclipse Adoptium",
         r"C:\Program Files\Microsoft",
+        r"C:\Program Files\Amazon Corretto",
+        r"C:\Program Files\Zulu",
+        r"C:\Program Files (x86)\Java",
     ];
+
+    let mut found_jdks = Vec::new();
+
     for base in paths {
         let p = PathBuf::from(base);
         if p.exists() {
             if let Ok(entries) = fs::read_dir(&p) {
                 for entry in entries.flatten() {
+                    let folder_name = entry.file_name().to_string_lossy().to_lowercase();
                     let exe = entry.path().join("bin").join("java.exe");
                     if exe.exists() {
-                        return Some(exe.to_string_lossy().to_string());
+                        // Ưu tiên JDK 21 hoặc JDK 17
+                        if folder_name.contains("21") || folder_name.contains("17") || folder_name.contains("22") || folder_name.contains("18") {
+                            return Some(exe.to_string_lossy().to_string());
+                        }
+                        found_jdks.push(exe.to_string_lossy().to_string());
                     }
                 }
             }
         }
     }
+
+    if let Some(first) = found_jdks.first() {
+        return Some(first.clone());
+    }
+
     Some("java".to_string())
 }
