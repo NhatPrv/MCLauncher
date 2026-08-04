@@ -27,6 +27,11 @@ import {
   Plus,
   Check,
   UserCheck,
+  Package,
+  Zap,
+  Palette,
+  Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -58,6 +63,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Tab = "home" | "mods" | "account";
 type LoaderType = "vanilla" | "fabric" | "forge" | "optifine";
+type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "texturepack" | "shader";
 
 interface VersionItem {
   id: string;
@@ -65,6 +71,19 @@ interface VersionItem {
   sub: string;
   loader: LoaderType;
   versionStr: string;
+}
+
+interface GalleryItem {
+  id: number;
+  name: string;
+  author: string;
+  category: CategoryType;
+  categoryLabel: string;
+  downloads: string;
+  rating: number;
+  icon: string;
+  desc: string;
+  color: string;
 }
 
 /* ─── Data ───────────────────────────────────────────────────────────────── */
@@ -97,13 +116,22 @@ const PATCH_NOTES = [
   "Crafter block — the first semi-automated crafting station",
 ];
 
-const MODS = [
-  { name: "Sodium",           author: "CaffeineMC", dl: "4.2M",  tag: "Performance", color: "#f59e0b" },
-  { name: "Iris Shaders",     author: "coderbot",    dl: "3.8M",  tag: "Visual",      color: "#06b6d4" },
-  { name: "Lithium",          author: "CaffeineMC", dl: "2.9M",  tag: "Performance", color: "#10b981" },
-  { name: "Create",           author: "simibubi",    dl: "8.1M",  tag: "Tech",        color: "#f97316" },
-  { name: "Biomes O' Plenty", author: "Forstride",  dl: "6.4M",  tag: "World",       color: "#84cc16" },
-  { name: "AppleSkin",        author: "squeek502",   dl: "5.0M",  tag: "HUD",         color: "#ec4899" },
+const CATEGORIES: { id: CategoryType; label: string; icon: React.ElementType; color: string }[] = [
+  { id: "all",          label: "Tất cả",          icon: Layers,    color: "#10b981" },
+  { id: "modpack",      label: "Modpacks",        icon: Package,   color: "#818cf8" },
+  { id: "mod",          label: "Mods",            icon: Zap,       color: "#f59e0b" },
+  { id: "resourcepack", label: "Resource Packs", icon: Palette,   color: "#ec4899" },
+  { id: "texturepack",  label: "Texture Packs",  icon: ImageIcon, color: "#84cc16" },
+  { id: "shader",       label: "Shaders",         icon: Sparkles,  color: "#06b6d4" },
+];
+
+const GALLERY_ITEMS: GalleryItem[] = [
+  { id: 1, name: "RLCraft Deluxe 1.21", author: "Shivaxi", category: "modpack", categoryLabel: "Modpack", downloads: "14.2M", rating: 4.9, icon: "🐉", desc: "Modpack sinh tồn thử thách khắc nghiệt nhất lịch sử Minecraft.", color: "#818cf8" },
+  { id: 2, name: "Sodium FPS Booster", author: "CaffeineMC", category: "mod", categoryLabel: "Mod", downloads: "24.5M", rating: 4.9, icon: "⚡", desc: "Tối ưu hóa render engine gia tăng FPS tối đa 120+.", color: "#f59e0b" },
+  { id: 3, name: "Complementary Shaders Unbound", author: "EminGT", category: "shader", categoryLabel: "Shader", downloads: "18.2M", rating: 4.9, icon: "✨", desc: "Hiệu ứng Ray-Tracing chiếu sáng mượt mà và mây khối 3D.", color: "#06b6d4" },
+  { id: 4, name: "Faithful 64x HD", author: "FaithfulTeam", category: "texturepack", categoryLabel: "Texture Pack", downloads: "32.1M", rating: 5.0, icon: "🖼️", desc: "Kết cấu đồ họa nét gấp 4 lần giữ nguyên phong cách Minecraft gốc.", color: "#84cc16" },
+  { id: 5, name: "Bare Bones Resource Pack", author: "RobotPanda", category: "resourcepack", categoryLabel: "Resource Pack", downloads: "11.4M", rating: 4.8, icon: "🎨", desc: "Đưa đồ họa game giống hệt như các video Minecraft Trailer chính thức.", color: "#ec4899" },
+  { id: 6, name: "All The Mods 9 (ATM9)", author: "ATMTeam", category: "modpack", categoryLabel: "Modpack", downloads: "8.7M", rating: 4.8, icon: "🎒", desc: "Gói tổng hợp hơn 400+ Mods kỹ thuật, ma thuật và thám hiểm.", color: "#818cf8" },
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -130,7 +158,7 @@ function LoaderBadge({ loader }: { loader: LoaderType }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — PROMINENT CARDS & INSTANT CLICK TO SELECT
+   MAIN COMPONENT — MODPACKS & RESOURCES GALLERY WITH CATEGORY FILTERS
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -141,6 +169,10 @@ export function App() {
   const [isLaunching, setIsLaunching]       = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [noteIdx, setNoteIdx]                 = useState(0);
+
+  // Gallery Filters
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>("all");
+  const [searchQuery, setSearchQuery]           = useState("");
 
   // Account Management State
   const [accountsList, setAccountsList] = useState<Account[]>([
@@ -269,6 +301,15 @@ export function App() {
     }
   };
 
+  // Filtered gallery items
+  const filteredGallery = GALLERY_ITEMS.filter((item) => {
+    const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+    const matchesSearch   = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            item.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            item.author.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
   const subText      = dark ? "#94a3b8" : "#475569";
@@ -278,7 +319,7 @@ export function App() {
   const btnBg        = dark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)";
   const inputBg      = dark ? "rgba(15,23,42,0.8)" : "#ffffff";
 
-  // Prominent Account Item Background Tokens (Nổi hơn giao diện 1 tí)
+  // Prominent Account Item Background Tokens
   const itemBgNormal = dark ? "#1e293b" : "#ffffff";
   const itemBgActive = dark ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.08)";
   const itemBorderNormal = dark ? "#334155" : "#cbd5e1";
@@ -482,36 +523,112 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: MODPACKS ─── */}
+        {/* ─── TAB: MODPACKS & CONTENT GALLERY WITH CATEGORY FILTERS ─── */}
         {activeTab === "mods" && (
-          <div className="max-w-7xl mx-auto space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-xl font-bold" style={{ color: titleText }}>Modpacks Gallery</h2>
-              <div className="relative w-full sm:w-64">
-                <Search size={14} className="absolute left-3 top-2.5" style={{ color: subText }} />
-                <input type="text" placeholder="Search mods..." className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border" style={{ background: inputBg, borderColor: border, color: titleText }} />
+          <div className="max-w-7xl mx-auto space-y-5">
+            {/* Gallery Header & Search Bar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Modpacks & Content Gallery</h2>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Tải về các bộ Modpack, Mods, Texture Packs, Resource Packs và Shaders chất lượng cao.</p>
+              </div>
+
+              <div className="relative w-full md:w-72">
+                <Search size={14} className="absolute left-3 top-3" style={{ color: subText }} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm kiếm Modpack, Shader, Mod..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
+                  style={{ background: inputBg, borderColor: border, color: titleText }}
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="absolute right-3 top-2.5 text-slate-400 hover:text-white">
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {MODS.map((m) => (
-                <div key={m.name} className="p-4 rounded-xl flex items-center justify-between border shadow-sm" style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-sm" style={{ color: titleText }}>{m.name}</h4>
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase" style={{ background: `${m.color}22`, color: m.color }}>{m.tag}</span>
-                    </div>
-                    <p className="text-xs mt-1 font-medium" style={{ color: subText }}>by {m.author} • {m.dl} downloads</p>
-                  </div>
-                  <button className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md">
-                    <Download size={12} /> Install
+
+            {/* Category Filter Chips / Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+              {CATEGORIES.map((cat) => {
+                const Icon = cat.icon;
+                const isCatActive = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex-shrink-0 border ${
+                      isCatActive
+                        ? "shadow-md scale-[1.02]"
+                        : "hover:scale-[1.01]"
+                    }`}
+                    style={{
+                      background: isCatActive ? `${cat.color}22` : btnBg,
+                      borderColor: isCatActive ? cat.color : border,
+                      color: isCatActive ? cat.color : titleText,
+                    }}
+                  >
+                    <Icon size={14} />
+                    <span>{cat.label}</span>
                   </button>
+                );
+              })}
+            </div>
+
+            {/* Gallery Items Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredGallery.length > 0 ? (
+                filteredGallery.map((m) => (
+                  <div
+                    key={m.id}
+                    className="p-5 rounded-2xl border flex flex-col justify-between transition-all hover:scale-[1.01] shadow-sm group"
+                    style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-sm" style={{ background: dark ? "rgba(30,41,59,0.8)" : "#e2e8f0" }}>
+                          {m.icon}
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider" style={{ background: `${m.color}22`, color: m.color, border: `1px solid ${m.color}33` }}>
+                          {m.categoryLabel}
+                        </span>
+                      </div>
+
+                      <h4 className="font-bold text-sm mb-1 group-hover:text-emerald-500 transition-colors" style={{ color: titleText }}>{m.name}</h4>
+                      <p className="text-xs leading-relaxed line-clamp-2 font-medium mb-3" style={{ color: subText }}>{m.desc}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: border }}>
+                      <div className="flex items-center gap-3 text-[11px] font-bold">
+                        <div className="flex items-center gap-1 text-amber-400">
+                          <Star size={11} fill="currentColor" />
+                          <span>{m.rating}</span>
+                        </div>
+                        <span style={{ color: subText }}>{m.downloads}</span>
+                      </div>
+
+                      <button className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md">
+                        <Download size={12} />
+                        <span>Install</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-12 text-center" style={{ color: subText }}>
+                  <Search size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-bold">Không tìm thấy nội dung phù hợp</p>
+                  <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn danh mục khác.</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}
 
-        {/* ─── TAB: ACCOUNT MANAGEMENT (PROMINENT CARDS & INSTANT CLICK SELECT) ─── */}
+        {/* ─── TAB: ACCOUNT MANAGEMENT ─── */}
         {activeTab === "account" && (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
@@ -528,7 +645,7 @@ export function App() {
             {/* 2-Column Layout Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* ── LEFT HALF: Existing Accounts List (Instant Click Select) ── */}
+              {/* ── LEFT HALF: Existing Accounts List ── */}
               <div className="space-y-4">
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Users size={15} className="text-emerald-500" />
