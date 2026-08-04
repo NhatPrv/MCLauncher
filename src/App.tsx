@@ -62,7 +62,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Tab = "home" | "versions" | "mods" | "account";
-type LoaderType = "vanilla" | "fabric" | "forge" | "optifine";
+type LoaderType = "vanilla" | "fabric" | "forge" | "neoforge" | "quilt" | "iris";
 type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
 
 interface VersionItem {
@@ -85,11 +85,14 @@ interface ModrinthProject {
   project_type: string;
 }
 
+/* ─── Loader Metadata (Chuẩn Phân Loại Minecraft) ───────────────────────── */
 const LOADER_META: Record<LoaderType, { emoji: string; color: string; bg: string; label: string }> = {
-  vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla"  },
-  fabric:   { emoji: "⚡", color: "#d97706", bg: "rgba(245,158,11,0.15)",  label: "Fabric"   },
-  forge:    { emoji: "🔨", color: "#dc2626", bg: "rgba(239,68,68,0.15)",  label: "Forge"    },
-  optifine: { emoji: "🔍", color: "#0891b2", bg: "rgba(6,182,212,0.15)",   label: "OptiFine" },
+  vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla & OptiFine" },
+  fabric:   { emoji: "⚡", color: "#d97706", bg: "rgba(245,158,11,0.15)",  label: "Fabric"             },
+  forge:    { emoji: "🔨", color: "#dc2626", bg: "rgba(239,68,68,0.15)",  label: "Forge & OptiForge"  },
+  neoforge: { emoji: "🛡️", color: "#10b981", bg: "rgba(16,185,129,0.15)",  label: "NeoForge"           },
+  quilt:    { emoji: "🪶", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)",  label: "Quilt Loader"       },
+  iris:     { emoji: "✦",  color: "#06b6d4", bg: "rgba(6,182,212,0.15)",   label: "Iris Shaders"       },
 };
 
 const SERVERS = [
@@ -144,7 +147,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — LIVE MOJANG VERSIONS FETCHING & TAB MANAGEMENT
+   MAIN COMPONENT — ADVANCED MINECRAFT MOD LOADERS CLASSIFICATION
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -195,7 +198,7 @@ export function App() {
     theme: "dark",
   });
 
-  /* ── Fetch Real Minecraft Game Versions from Mojang API ── */
+  /* ── Fetch Real Minecraft Game Versions & Categorize Loaders ── */
   const fetchRealGameVersions = useCallback(async () => {
     setIsLoadingVersions(true);
     try {
@@ -204,35 +207,65 @@ export function App() {
         const data = await res.json();
         const releaseEntries = (data.versions || []).filter((v: any) => v.type === "release");
 
-        const parsedVersions: VersionItem[] = releaseEntries.map((v: any) => {
-          const isInstalled = v.id === "1.21.1" || v.id === "1.20.1" || v.id === "1.19.4";
-          return {
-            id: v.id,
-            label: v.id,
-            sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
-            loader: "vanilla",
-            versionStr: v.id,
-            isInstalled,
-            releaseDate: v.releaseTime,
-          };
-        });
+        // Vanilla & OptiFine Standalone
+        const vanillaList: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: v.id,
+          label: v.id,
+          sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
+          loader: "vanilla" as LoaderType,
+          versionStr: v.id,
+          isInstalled: v.id === "1.21.1" || v.id === "1.20.1" || v.id === "1.19.4",
+          releaseDate: v.releaseTime,
+        }));
 
-        // Add popular loader variants for 1.21.1 and 1.20.1
+        // OptiFine Standalone thuộc Vanilla
+        const optifineStandalone: VersionItem[] = [
+          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: true },
+          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: false },
+        ];
+
+        // Fabric Loader
         const fabricVariants: VersionItem[] = [
           { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: true },
           { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: false },
           { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: false },
         ];
+
+        // Forge & OptiForge Combo
         const forgeVariants: VersionItem[] = [
           { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: true },
-          { id: "1.20.1-forge", label: "1.20.1 Forge", sub: "Forge 47.2.0", loader: "forge", versionStr: "1.20.1", isInstalled: false },
-        ];
-        const optifineVariants: VersionItem[] = [
-          { id: "1.20.1-optifine", label: "1.20.1 OptiFine", sub: "HD U I7 pre6", loader: "optifine", versionStr: "1.20.1", isInstalled: true },
-          { id: "1.19.4-optifine", label: "1.19.4 OptiFine", sub: "HD U I4", loader: "optifine", versionStr: "1.19.4", isInstalled: false },
+          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: true },
+          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: false },
         ];
 
-        const fullList = [...fabricVariants, ...forgeVariants, ...optifineVariants, ...parsedVersions];
+        // NeoForge (Forge thế hệ mới từ 1.20.2+)
+        const neoforgeVariants: VersionItem[] = [
+          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: true },
+          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: false },
+        ];
+
+        // Quilt Loader
+        const quiltVariants: VersionItem[] = [
+          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: false },
+          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: false },
+        ];
+
+        // Iris Shaders Loader
+        const irisVariants: VersionItem[] = [
+          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: true },
+          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: false },
+        ];
+
+        const fullList = [
+          ...neoforgeVariants,
+          ...fabricVariants,
+          ...forgeVariants,
+          ...quiltVariants,
+          ...irisVariants,
+          ...optifineStandalone,
+          ...vanillaList,
+        ];
+
         setFetchedVersionsList(fullList);
         if (fullList.length > 0 && !selectedVersion) {
           setSelectedVersion(fullList[0]);
@@ -399,7 +432,7 @@ export function App() {
     }
   };
 
-  // Filter versions by loader and search query
+  // Filter versions by loader and search query (sorted newest to oldest)
   const filteredVersionsTab = fetchedVersionsList.filter((v) => {
     const matchesLoader = v.loader === versionTabLoader;
     const matchesSearch = v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
@@ -621,7 +654,7 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: GAME VERSIONS MANAGEMENT (FETCHED LIVE FROM MOJANG) ─── */}
+        {/* ─── TAB: GAME VERSIONS MANAGEMENT (CLASSIFIED LOADERS) ─── */}
         {activeTab === "versions" && (
           <div className="max-w-7xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -632,7 +665,9 @@ export function App() {
                     Mojang API Official
                   </span>
                 </div>
-                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Danh sách các phiên bản game chính thức tải từ Mojang API. Phiên bản đã tải được Highlight màu xanh nổi bật.</p>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>
+                  Danh sách phiên bản phân chia theo loại Loader (OptiFine thuộc Vanilla; Forge + OptiForge thuộc Forge; NeoForge, Fabric, Quilt, Iris).
+                </p>
               </div>
 
               <div className="relative w-full md:w-72">
@@ -649,15 +684,15 @@ export function App() {
             </div>
 
             {/* Sub-tabs / Loader Category Filter Chips */}
-            <div className="flex items-center gap-2 border-b pb-3" style={{ borderColor: border }}>
-              {(["vanilla", "fabric", "forge", "optifine"] as LoaderType[]).map((loaderKey) => {
+            <div className="flex items-center gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+              {(["vanilla", "fabric", "forge", "neoforge", "quilt", "iris"] as LoaderType[]).map((loaderKey) => {
                 const meta = LOADER_META[loaderKey];
                 const isActive = versionTabLoader === loaderKey;
                 return (
                   <button
                     key={loaderKey}
                     onClick={() => setVersionTabLoader(loaderKey)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 border ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex-shrink-0 border ${
                       isActive ? "shadow-md scale-[1.02]" : "hover:scale-[1.01]"
                     }`}
                     style={{
@@ -750,8 +785,8 @@ export function App() {
             ) : (
               <div className="py-16 text-center" style={{ color: subText }}>
                 <Search size={36} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-bold">Không tìm thấy phiên bản phù hợp</p>
-                <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn Tab loader khác.</p>
+                <p className="text-sm font-bold">Không tìm thấy phiên bản phù hợp trong mục này</p>
+                <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn loại Loader khác.</p>
               </div>
             )}
           </div>
