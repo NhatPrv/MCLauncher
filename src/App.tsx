@@ -18,13 +18,13 @@ import {
   User,
   Star,
   Clock,
+  Download,
   Loader2,
+  CheckCircle,
+  X,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
-import { VersionsTab } from "./components/VersionsTab";
-import { AccountTab } from "./components/AccountTab";
-import { SettingsModal } from "./components/SettingsModal";
 
 type Tab = "home" | "mods" | "account";
 type Loader = "vanilla" | "fabric" | "forge" | "optifine";
@@ -36,12 +36,12 @@ interface VersionItem {
   versionStr: string;
 }
 
-const DEFAULT_VERSIONS: VersionItem[] = [
+const VERSIONS: VersionItem[] = [
   { id: "1.21.1", label: "1.21.1 — Tricky Trials", loader: "vanilla", versionStr: "1.21.1" },
-  { id: "1.21.1-fabric", label: "1.21.1 — Fabric Loader", loader: "fabric", versionStr: "1.21.1" },
-  { id: "1.20.4-forge", label: "1.20.4 — Minecraft Forge", loader: "forge", versionStr: "1.20.4" },
-  { id: "1.20.1-optifine", label: "1.20.1 — OptiFine HD", loader: "optifine", versionStr: "1.20.1" },
-  { id: "1.19.4", label: "1.19.4 — Vanilla", loader: "vanilla", versionStr: "1.19.4" },
+  { id: "1.21.1-fabric", label: "1.21.1 — Fabric 0.15.11", loader: "fabric", versionStr: "1.21.1" },
+  { id: "1.20.4-forge", label: "1.20.4 — Forge 49.0.30", loader: "forge", versionStr: "1.20.4" },
+  { id: "1.20.1-optifine", label: "1.20.1 — OptiFine HD U I7", loader: "optifine", versionStr: "1.20.1" },
+  { id: "1.19.4", label: "1.19.4 — Vanilla Standard", loader: "vanilla", versionStr: "1.19.4" },
 ];
 
 const LOADER_ICON: Record<Loader, { icon: React.ElementType; color: string; label: string }> = {
@@ -54,7 +54,14 @@ const LOADER_ICON: Record<Loader, { icon: React.ElementType; color: string; labe
 const SERVERS = [
   { name: "Hypixel", address: "mc.hypixel.net", ping: 42, players: 87432, online: true, icon: "⚔️" },
   { name: "Complex Gaming", address: "hub.mc-complex.com", ping: 78, players: 12904, online: true, icon: "🏙️" },
-  { name: "ManaCube", address: "play.manacube.com", ping: 112, players: 4201, online: true, icon: "🌐" },
+  { name: "Mineplex", address: "us.mineplex.com", ping: 112, players: 4201, online: true, icon: "🌐" },
+];
+
+const MODPACKS = [
+  { id: 1, name: "Sodium FPS Booster", category: "Mods", downloads: "24.5M", rating: 4.9, icon: "⚡", desc: "Tối ưu hóa render engine gia tăng FPS tối đa." },
+  { id: 2, name: "Iris Shaders", category: "Shaders", downloads: "18.2M", rating: 4.8, icon: "✨", desc: "Hỗ trợ Shaders Ray-Tracing mượt mà trên Fabric." },
+  { id: 3, name: "Just Enough Items (JEI)", category: "Utility", downloads: "45.1M", rating: 5.0, icon: "📖", desc: "Xem công thức chế tạo và danh sách vật phẩm." },
+  { id: 4, name: "Sophisticated Backpacks", category: "Mods", downloads: "12.8M", rating: 4.7, icon: "🎒", desc: "Túi đồ thông minh nâng cấp sức chứa cho nhân vật." },
 ];
 
 function LoaderIcon({ loader, size = 14 }: { loader: Loader; size?: number }) {
@@ -75,11 +82,11 @@ function PingDot({ ping }: { ping: number }) {
 export function App() {
   const [dark, setDark] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [selectedVersion, setSelectedVersion] = useState<VersionItem>(DEFAULT_VERSIONS[0]);
-  const [selectedLoader, setSelectedLoader] = useState<string>("Vanilla");
+  const [selectedVersion, setSelectedVersion] = useState<VersionItem>(VERSIONS[0]);
   const [versionOpen, setVersionOpen] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [offlineNameInput, setOfflineNameInput] = useState("Steve_MC_2026");
 
   const [account, setAccount] = useState<Account | null>({
     username: "Steve_MC_2026",
@@ -137,13 +144,12 @@ export function App() {
         });
       }
 
-      const pid = await invoke<number>("launch_minecraft", {
+      await invoke<number>("launch_minecraft", {
         versionId: fullVersionId,
         account: activeAcc,
         config,
       });
 
-      console.log("Game spawned PID:", pid);
       setTimeout(() => setIsLaunching(false), 2500);
     } catch (err: any) {
       setIsLaunching(false);
@@ -157,10 +163,22 @@ export function App() {
     });
   };
 
+  const handleSaveOfflineName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offlineNameInput.trim()) return;
+    try {
+      const acc = await invoke<Account>("login_offline", { username: offlineNameInput.trim() });
+      setAccount(acc);
+      alert("Đã cập nhật tên tài khoản Offline!");
+    } catch (err: any) {
+      alert("Lỗi tạo tài khoản: " + err);
+    }
+  };
+
   return (
     <div className={dark ? "dark" : ""} style={{ width: "100vw", height: "100vh", fontFamily: "'Inter', sans-serif" }}>
       <div
-        className="relative flex flex-col overflow-hidden w-full h-full"
+        className="relative flex flex-col overflow-hidden w-full h-full select-none"
         style={{
           background: dark ? "#0f172a" : "#f8fafc",
           color: dark ? "#e2e8f0" : "#0f172a",
@@ -179,7 +197,7 @@ export function App() {
           }}
         />
 
-        {/* TOP NAVBAR */}
+        {/* 100% FIGMA TOP NAVBAR */}
         <nav
           className="relative z-20 flex items-center px-5 flex-shrink-0"
           style={{
@@ -222,12 +240,12 @@ export function App() {
             </div>
           </div>
 
-          {/* Center Navigation Tabs */}
+          {/* Center Tabs */}
           <div className="flex-1 flex items-center justify-center gap-1">
             {([
-              { id: "home", label: "Trang Chủ", icon: Newspaper },
-              { id: "mods", label: "Mods & Loaders", icon: Layers },
-              { id: "account", label: "Tài Khoản", icon: User },
+              { id: "home", label: "Home & News", icon: Newspaper },
+              { id: "mods", label: "Mods & Packs", icon: Layers },
+              { id: "account", label: "Account", icon: User },
             ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -255,11 +273,12 @@ export function App() {
                 background: dark ? "rgba(51,65,85,0.5)" : "rgba(226,232,240,0.7)",
                 color: dark ? "#94a3b8" : "#64748b",
               }}
-              title="Cài đặt Launcher"
+              title="Settings"
             >
               <Settings size={15} />
             </button>
-            {/* Theme Toggle */}
+
+            {/* Dark/Light Theme Switcher */}
             <button
               onClick={handleToggleTheme}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
@@ -282,8 +301,9 @@ export function App() {
           </div>
         </nav>
 
-        {/* MAIN CONTENT AREA */}
+        {/* 100% FIGMA MAIN CONTENT AREA */}
         <div className="flex-1 overflow-y-auto relative z-10">
+          {/* TAB 1: HOME & NEWS */}
           {activeTab === "home" && (
             <div className="px-5 py-4 space-y-4">
               {/* Hero Banner */}
@@ -310,19 +330,19 @@ export function App() {
                         boxShadow: "0 0 10px rgba(16,185,129,0.5)",
                       }}
                     >
-                      Bản Cập Nhật Mới
+                      Latest Release
                     </span>
                     <span className="text-xs text-slate-400">
                       <Clock size={10} className="inline mr-1" />
-                      Phát hành Jul 2024
+                      Released Jul 12, 2024
                     </span>
                   </div>
                   <div>
                     <h1 className="font-bold mb-1 text-2xl text-white leading-tight">
-                      Minecraft 1.21.1 <span style={{ color: "#10b981" }}>Tricky Trials</span>
+                      Minecraft 1.21.1 <span style={{ color: "#10b981" }}>Tricky Trials Update</span>
                     </h1>
                     <p className="text-xs mb-3 text-slate-300 max-w-sm">
-                      Khám phá Trial Chambers mới, vũ khí Mace quyền năng, Breeze mobs và các công trình bằng đồng cực đẹp.
+                      New Trial Chambers, the Mace weapon, Wind Charges, Breeze mobs, and copper structures await.
                     </p>
                     <div className="flex items-center gap-2">
                       <button
@@ -334,7 +354,7 @@ export function App() {
                         }}
                       >
                         <Play size={13} fill="currentColor" />
-                        Chơi Bản 1.21.1
+                        Play 1.21.1
                       </button>
                     </div>
                   </div>
@@ -358,12 +378,12 @@ export function App() {
                       className="w-full h-full object-cover opacity-70"
                     />
                     <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white">
-                      TIN TỨC
+                      NEWS
                     </span>
                   </div>
                   <div className="p-3">
-                    <h3 className="font-bold text-sm mb-1 leading-tight">Mob Vote 2024 Result</h3>
-                    <p className="text-xs text-slate-400">Armadillo đã chiến thắng bình chọn cộng đồng.</p>
+                    <h3 className="font-bold text-sm mb-1 leading-tight">Mob Vote 2024 Results Announced</h3>
+                    <p className="text-xs text-slate-400">The Armadillo won the community vote and is live in 1.21.</p>
                   </div>
                 </div>
 
@@ -385,10 +405,10 @@ export function App() {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-bold text-sm">Fabric 0.15.11</h3>
                       <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-400 font-bold">
-                        Cập nhật
+                        Updated
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">Tối ưu hóa bộ nhớ RAM và tốc độ load game.</p>
+                    <p className="text-xs text-slate-400">Now supports 1.21.1 with improved mod compatibility.</p>
                   </div>
                 </div>
 
@@ -417,7 +437,7 @@ export function App() {
                         <Star size={10} fill="currentColor" /> 4.9
                       </div>
                     </div>
-                    <p className="text-xs text-slate-400">Hiệu ứng Ray-Tracing đồ họa 120 FPS+.</p>
+                    <p className="text-xs text-slate-400">Volumetric clouds & Ray-traced reflections.</p>
                   </div>
                 </div>
               </div>
@@ -434,7 +454,7 @@ export function App() {
                   <h3 className="font-extrabold text-xs tracking-wider uppercase text-slate-300">
                     FEATURED SERVERS
                   </h3>
-                  <span className="text-xs text-slate-400">3 Online</span>
+                  <span className="text-xs text-slate-400">3 online</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {SERVERS.map((server) => (
@@ -466,25 +486,135 @@ export function App() {
             </div>
           )}
 
+          {/* TAB 2: MODS & PACKS (100% FIGMA DESIGN) */}
           {activeTab === "mods" && (
-            <VersionsTab
-              config={config}
-              selectedVersion={selectedVersion.versionStr}
-              selectedLoader={selectedLoader}
-              setSelectedLoader={setSelectedLoader}
-            />
+            <div className="px-5 py-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">Mods & Modpacks Gallery</h2>
+                  <p className="text-xs text-slate-400">Khám phá và tải về tự động các Mod Loader, Shaders và Modpack tối ưu.</p>
+                </div>
+                <div className="relative w-64">
+                  <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm mod hoặc modpack..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {MODPACKS.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-2xl border transition-all hover:scale-[1.01] flex items-start space-x-3.5"
+                    style={{
+                      background: dark ? "rgba(24,24,27,0.8)" : "rgba(255,255,255,0.8)",
+                      border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+                    }}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-2xl flex-shrink-0">
+                      {item.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-sm truncate">{item.name}</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">
+                          {item.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.desc}</p>
+                      <div className="flex items-center justify-between mt-3 text-[11px] text-slate-400 font-semibold">
+                        <div className="flex items-center space-x-1 text-amber-400">
+                          <Star size={12} fill="currentColor" />
+                          <span>{item.rating}</span>
+                          <span className="text-slate-500">({item.downloads})</span>
+                        </div>
+                        <button className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-1">
+                          <Download size={11} />
+                          <span>Tải Ngay</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
+          {/* TAB 3: ACCOUNT MANAGEMENT (100% FIGMA DESIGN) */}
           {activeTab === "account" && (
-            <AccountTab
-              config={config}
-              account={account}
-              setAccount={setAccount}
-            />
+            <div className="px-5 py-4 space-y-6 max-w-2xl mx-auto">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight">Quản Lý Tài Khoản Game</h2>
+                <p className="text-xs text-slate-400 mt-1">Cấu hình hồ sơ tài khoản Offline (Cracked) hoặc Microsoft Online OAuth2.</p>
+              </div>
+
+              {/* Active User Card */}
+              {account && (
+                <div
+                  className="p-5 rounded-2xl border flex items-center justify-between shadow-xl"
+                  style={{
+                    background: dark ? "rgba(24,24,27,0.9)" : "rgba(255,255,255,0.9)",
+                    border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+                  }}
+                >
+                  <div className="flex items-center space-x-4">
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg"
+                      style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)" }}
+                    >
+                      {account.username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-extrabold text-lg">{account.username}</span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          {account.account_type} Mode
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">UUID: {account.uuid}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1 text-emerald-400 text-xs font-bold bg-emerald-500/10 px-3 py-1.5 rounded-xl">
+                    <CheckCircle size={14} />
+                    <span>Active Profile</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Change Offline Username Form */}
+              <div
+                className="p-5 rounded-2xl border space-y-3"
+                style={{
+                  background: dark ? "rgba(24,24,27,0.6)" : "rgba(255,255,255,0.6)",
+                  border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+                }}
+              >
+                <h3 className="font-bold text-sm">Cập Nhật Tên Offline (Cracked)</h3>
+                <form onSubmit={handleSaveOfflineName} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={offlineNameInput}
+                    onChange={(e) => setOfflineNameInput(e.target.value)}
+                    placeholder="Tên mới..."
+                    className="flex-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold outline-none focus:border-emerald-500 text-slate-100"
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white transition-all"
+                  >
+                    Lưu Tên Này
+                  </button>
+                </form>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* STICKY BOTTOM ACTION BAR */}
+        {/* 100% FIGMA STICKY BOTTOM ACTION BAR */}
         <div
           className="relative z-20 flex items-center px-5 gap-3 flex-shrink-0"
           style={{
@@ -494,7 +624,7 @@ export function App() {
             backdropFilter: "blur(16px)",
           }}
         >
-          {/* Account Selector */}
+          {/* Account Selector Card */}
           <div
             onClick={() => setActiveTab("account")}
             className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all hover:scale-[1.02]"
@@ -548,12 +678,11 @@ export function App() {
                     border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
                   }}
                 >
-                  {DEFAULT_VERSIONS.map((v) => (
+                  {VERSIONS.map((v) => (
                     <button
                       key={v.id}
                       onClick={() => {
                         setSelectedVersion(v);
-                        setSelectedLoader(v.loader.toUpperCase());
                         setVersionOpen(false);
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-left transition-colors ${
@@ -640,13 +769,67 @@ export function App() {
         </div>
       </div>
 
-      {/* Settings Modal Popup */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        config={config}
-        setConfig={setConfig}
-      />
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden p-6 space-y-5 text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <span className="w-6 h-6 rounded bg-emerald-500 text-white font-black text-xs flex items-center justify-center">
+                  MC
+                </span>
+                <h3 className="font-extrabold text-base">Cấu Hình Launcher & Engine</h3>
+              </div>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase">Max RAM Allocation: {config.max_ram_mb} MB</label>
+                <input
+                  type="range"
+                  min="1024"
+                  max="16384"
+                  step="512"
+                  value={config.max_ram_mb}
+                  onChange={(e) => setConfig({ ...config, max_ram_mb: Number(e.target.value) })}
+                  className="w-full accent-emerald-500 cursor-pointer mt-2"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase">Java Executable Path</label>
+                <input
+                  type="text"
+                  value={config.java_path}
+                  onChange={(e) => setConfig({ ...config, java_path: e.target.value })}
+                  className="w-full p-2.5 mt-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-300"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  invoke("update_config", { config }).catch(() => {});
+                  setIsSettingsOpen(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-emerald-600 font-bold text-xs text-white"
+              >
+                Lưu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
