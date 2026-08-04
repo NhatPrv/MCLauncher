@@ -4,7 +4,7 @@
 
 ---
 
-## 🌟 Tính Năng Nổi Bật
+## 🌟 Tính Năng Nổi Bật (100% Completed)
 
 - 🚀 **Siêu Nhẹ & Tốc Độ:** Được xây dựng bằng Rust (Tauri v2) + React + TailwindCSS.
 - 🔒 **Bảo Mật Bộ Nhớ Tuyệt Đối:** Không chứa code theo dõi, không quảng cáo, không thu thập dữ liệu trái phép.
@@ -58,9 +58,9 @@
    npm run tauri dev
    ```
 
-4. **Đóng gói ứng dụng (Production Build):**
-   ```bash
-   npm run tauri build
+4. **Đóng gói ứng dụng (Production Release Build):**
+   ```powershell
+   powershell ./scripts/build.ps1
    ```
 
 ---
