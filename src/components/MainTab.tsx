@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Loader2, Sparkles, ShieldAlert } from 'lucide-react';
+import { Play, Loader2, Sparkles, ShieldAlert, Cpu, Layers } from 'lucide-react';
 import { Account, AppConfig } from '../types';
+import { CustomDropdown, DropdownOption } from './CustomDropdown';
 import { invoke } from '@tauri-apps/api/core';
 
 interface MainTabProps {
@@ -27,6 +28,25 @@ export const MainTab: React.FC<MainTabProps> = ({
   const [statusText, setStatusText] = useState<string>('');
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  // Prepare options for Version Custom Dropdown
+  const versionOptions: DropdownOption[] = versionsList.map((ver) => ({
+    value: ver,
+    label: `Minecraft ${ver}`,
+    badge: ver === versionsList[0] ? 'Mới Nhất' : undefined,
+    icon: '📦',
+  }));
+
+  // Prepare options for Mod Loader Custom Dropdown
+  const loaderOptions: DropdownOption[] = [
+    { value: 'Vanilla', label: 'Vanilla Standard', description: 'Nguyên bản không mod', icon: '📦' },
+    { value: 'Fabric', label: 'Fabric Loader', description: 'Siêu nhẹ & Tối ưu FPS', badge: 'Khuyên Dùng', icon: '⚡' },
+    { value: 'Forge', label: 'Minecraft Forge', description: 'Phong phú mods truyền thống', icon: '🔨' },
+    { value: 'Quilt', label: 'Quilt Loader', description: 'Mod loader mô-đun tiên tiến', icon: '🍃' },
+    { value: 'NeoForge', label: 'NeoForge', description: 'Modern Forge ecosystem', icon: '💥' },
+    { value: 'OptiFine', label: 'OptiFine HD', description: 'Tăng FPS & Tùy biến đồ họa', icon: '🔍' },
+    { value: 'Iris', label: 'Iris Shaders', description: 'Shaders đồ họa tốc độ cao', icon: '✨' },
+  ];
+
   const handlePlayGame = async () => {
     if (!account) {
       setErrorText('Vui lòng chọn hoặc tạo tài khoản trước khi chơi game!');
@@ -39,7 +59,6 @@ export const MainTab: React.FC<MainTabProps> = ({
     setLaunchProgress(20);
 
     try {
-      // 1. Prepare version string
       let fullVersionId = selectedVersion;
       if (selectedLoader !== 'Vanilla') {
         setStatusText(`Đang tải & cấu hình Mod Loader ${selectedLoader}...`);
@@ -55,7 +74,6 @@ export const MainTab: React.FC<MainTabProps> = ({
       setStatusText('Đang khởi chạy Minecraft Java Executable...');
       setLaunchProgress(85);
 
-      // 2. Invoke launch command
       const pid = await invoke<number>('launch_minecraft', {
         versionId: fullVersionId,
         account,
@@ -77,78 +95,65 @@ export const MainTab: React.FC<MainTabProps> = ({
 
   return (
     <div className="flex-1 p-8 overflow-y-auto flex flex-col justify-between relative">
-      {/* Background Graphic Accent */}
+      {/* Dynamic Background Glow */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
 
       {/* Header Banner */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Sẵn sàng trải nghiệm Minecraft Tốc độ cao</span>
+          <span>MCLauncher Engine v1.0 • Safe & Clean</span>
         </div>
 
-        <h2 className="text-4xl font-extrabold tracking-tight">
-          Chào mừng trở lại, <span className="text-emerald-400">{account?.username || 'Gamer'}</span>!
+        <h2 className="text-4xl font-black tracking-tight">
+          Chào mừng, <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-green-300">{account?.username || 'Gamer'}</span>!
         </h2>
         <p className="text-slate-400 text-sm max-w-xl">
-          Lựa chọn phiên bản Minecraft Vanilla hoặc Modded Loader yêu thích của bạn và bấm Chơi Game để trải nghiệm ngay lập tức.
+          Lựa chọn phiên bản game và bộ khởi chạy Mod bằng hệ thống Dropdown tùy chỉnh bên dưới.
         </p>
       </div>
 
-      {/* Version Selector Cards */}
-      <div className="my-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Vanilla Version Box */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          config.theme === 'dark' ? 'bg-slate-800/60 border-slate-700' : 'bg-white border-slate-200'
+      {/* Custom Dropdown Selection Cards */}
+      <div className="my-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Version Dropdown Box */}
+        <div className={`p-6 rounded-2xl border transition-all ${
+          config.theme === 'dark' ? 'bg-slate-800/60 border-slate-700/80' : 'bg-white border-slate-200 shadow-md'
         }`}>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-            Phiên bản Game (Vanilla)
-          </label>
-          <select
+          <div className="flex items-center space-x-2 mb-3">
+            <Layers className="w-4 h-4 text-emerald-400" />
+            <label className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+              Phiên Bản Minecraft (Vanilla)
+            </label>
+          </div>
+          <CustomDropdown
+            options={versionOptions}
             value={selectedVersion}
-            onChange={(e) => setSelectedVersion(e.target.value)}
-            className={`w-full p-3 rounded-xl border font-semibold outline-none focus:ring-2 focus:ring-emerald-500 transition-all ${
-              config.theme === 'dark' 
-                ? 'bg-slate-900 border-slate-700 text-slate-100' 
-                : 'bg-slate-50 border-slate-300 text-slate-800'
-            }`}
-          >
-            {versionsList.map((ver) => (
-              <option key={ver} value={ver}>
-                Minecraft {ver}
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedVersion}
+            searchable={true}
+            theme={config.theme}
+          />
         </div>
 
-        {/* Mod Loader Box */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          config.theme === 'dark' ? 'bg-slate-800/60 border-slate-700' : 'bg-white border-slate-200'
+        {/* Mod Loader Dropdown Box */}
+        <div className={`p-6 rounded-2xl border transition-all ${
+          config.theme === 'dark' ? 'bg-slate-800/60 border-slate-700/80' : 'bg-white border-slate-200 shadow-md'
         }`}>
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-            Mod Loader & Shaders Engine
-          </label>
-          <select
+          <div className="flex items-center space-x-2 mb-3">
+            <Cpu className="w-4 h-4 text-emerald-400" />
+            <label className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+              Mod Loader & Shader Engine
+            </label>
+          </div>
+          <CustomDropdown
+            options={loaderOptions}
             value={selectedLoader}
-            onChange={(e) => setSelectedLoader(e.target.value)}
-            className={`w-full p-3 rounded-xl border font-semibold outline-none focus:ring-2 focus:ring-emerald-500 transition-all ${
-              config.theme === 'dark' 
-                ? 'bg-slate-900 border-slate-700 text-slate-100' 
-                : 'bg-slate-50 border-slate-300 text-slate-800'
-            }`}
-          >
-            <option value="Vanilla">Vanilla (Không Mod)</option>
-            <option value="Fabric">Fabric Loader (Nhanh & Tối ưu)</option>
-            <option value="Forge">Forge Loader (Phong phú Mods)</option>
-            <option value="Quilt">Quilt Loader (Tiên tiến)</option>
-            <option value="NeoForge">NeoForge (Modern Forge)</option>
-            <option value="OptiFine">OptiFine (Tăng FPS)</option>
-            <option value="Iris">Iris Shaders (Shaders Đồ Họa)</option>
-          </select>
+            onChange={setSelectedLoader}
+            theme={config.theme}
+          />
         </div>
       </div>
 
-      {/* Error Display */}
+      {/* Error Alert */}
       {errorText && (
         <div className="p-4 mb-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center space-x-3">
           <ShieldAlert className="w-5 h-5 flex-shrink-0" />
@@ -157,18 +162,20 @@ export const MainTab: React.FC<MainTabProps> = ({
       )}
 
       {/* Launch Control Panel */}
-      <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-6 ${
-        config.theme === 'dark' ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-slate-200 shadow-xl'
+      <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl ${
+        config.theme === 'dark'
+          ? 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-slate-700'
+          : 'bg-white border-slate-200'
       }`}>
         <div className="space-y-1 text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start space-x-2">
-            <span className="font-extrabold text-lg">Minecraft {selectedVersion}</span>
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400">
+            <span className="font-black text-xl tracking-tight">Minecraft {selectedVersion}</span>
+            <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               {selectedLoader}
             </span>
           </div>
-          <p className="text-xs text-slate-400">
-            {account ? `Tài khoản: ${account.username} (${account.account_type})` : 'Chưa có tài khoản đăng nhập'}
+          <p className="text-xs text-slate-400 font-medium">
+            {account ? `Tài khoản: ${account.username} (${account.account_type})` : 'Chưa chọn tài khoản đăng nhập'}
           </p>
         </div>
 
@@ -176,10 +183,10 @@ export const MainTab: React.FC<MainTabProps> = ({
         <button
           disabled={isLaunching}
           onClick={handlePlayGame}
-          className={`w-full md:w-auto px-10 py-4 rounded-2xl font-black text-lg flex items-center justify-center space-x-3 transition-all duration-300 ${
+          className={`w-full md:w-auto px-12 py-4 rounded-2xl font-black text-lg flex items-center justify-center space-x-3 transition-all duration-300 relative overflow-hidden ${
             isLaunching
               ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:from-emerald-400 hover:to-green-500 text-white shadow-xl shadow-green-500/30 hover:scale-105 active:scale-95'
+              : 'bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:from-emerald-400 hover:to-green-500 text-white shadow-xl shadow-green-500/30 hover:scale-[1.03] active:scale-95'
           }`}
         >
           {isLaunching ? (
@@ -203,7 +210,7 @@ export const MainTab: React.FC<MainTabProps> = ({
             <span>{statusText}</span>
             <span>{launchProgress}%</span>
           </div>
-          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300"
               style={{ width: `${launchProgress}%` }}
