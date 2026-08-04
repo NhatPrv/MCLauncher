@@ -219,15 +219,16 @@ export function App() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200"
+              title={label}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200"
               style={{
                 background: activeTab === id ? "rgba(16,185,129,0.15)" : "transparent",
                 color: activeTab === id ? "#10b981" : subText,
                 border: activeTab === id ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
               }}
             >
-              <Icon size={13} />
-              <span className="hidden xs:inline">{label}</span>
+              <Icon size={14} className="flex-shrink-0" />
+              <span className="hidden sm:inline whitespace-nowrap">{label}</span>
             </button>
           ))}
         </div>
