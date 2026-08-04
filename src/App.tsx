@@ -31,7 +31,6 @@ import {
   Palette,
   Sparkles,
   ListFilter,
-  DownloadCloud,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -134,7 +133,7 @@ function PingBar({ ping }: { ping: number }) {
 function LoaderBadge({ loader }: { loader: LoaderType }) {
   const { emoji, color, bg, label } = LOADER_META[loader];
   return (
-    <span className="inline-flex items-center gap-1 rounded-md font-semibold px-2 py-0.5" style={{ background: bg, color, fontSize: 10, border: `1px solid ${color}33` }}>
+    <span className="inline-flex items-center gap-1.5 rounded-lg font-bold px-2.5 py-1" style={{ background: bg, color, fontSize: 11, border: `1px solid ${color}33` }}>
       <span>{emoji}</span> {label}
     </span>
   );
@@ -147,7 +146,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — ADVANCED MINECRAFT MOD LOADERS CLASSIFICATION
+   MAIN COMPONENT — SINGLE COLUMN ROW-BY-ROW GAME VERSIONS LIST
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -166,6 +165,7 @@ export function App() {
   const [versionTabLoader, setVersionTabLoader]     = useState<LoaderType>("vanilla");
   const [isLoadingVersions, setIsLoadingVersions]   = useState(false);
   const [versionSearchQuery, setVersionSearchQuery] = useState("");
+  const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
 
   // Modrinth API Gallery State
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>("all");
@@ -198,7 +198,7 @@ export function App() {
     theme: "dark",
   });
 
-  /* ── Fetch Real Minecraft Game Versions & Categorize Loaders ── */
+  /* ── Fetch Real Minecraft Game Versions ── */
   const fetchRealGameVersions = useCallback(async () => {
     setIsLoadingVersions(true);
     try {
@@ -238,7 +238,7 @@ export function App() {
           { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: false },
         ];
 
-        // NeoForge (Forge thế hệ mới từ 1.20.2+)
+        // NeoForge
         const neoforgeVariants: VersionItem[] = [
           { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: true },
           { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: false },
@@ -378,6 +378,42 @@ export function App() {
 
   const handleOpenFolder = () => { invoke("plugin:opener|open_path", { path: config.game_dir }).catch(() => alert(`Game dir: ${config.game_dir}`)); };
 
+  // Install / Download Version Handler
+  const handleInstallVersion = async (targetVer: VersionItem) => {
+    setInstallingVersionId(targetVer.id);
+    try {
+      if (targetVer.loader !== "vanilla") {
+        await invoke<string>("install_mod_loader_cmd", {
+          gameDir: config.game_dir,
+          gameVersion: targetVer.versionStr,
+          loaderName: targetVer.loader,
+          loaderVersion: "latest",
+        });
+      }
+      // Update local installed state
+      setFetchedVersionsList((prev) =>
+        prev.map((v) => (v.id === targetVer.id ? { ...v, isInstalled: true } : v))
+      );
+      setSelectedVersion({ ...targetVer, isInstalled: true });
+    } catch (err: any) {
+      alert("Tải phiên bản thất bại: " + err);
+    } finally {
+      setInstallingVersionId(null);
+    }
+  };
+
+  // Uninstall / Remove Version Handler
+  const handleUninstallVersion = (targetVer: VersionItem) => {
+    if (confirm(`Bạn có chắc chắn muốn gỡ phiên bản ${targetVer.label} khỏi máy không?`)) {
+      setFetchedVersionsList((prev) =>
+        prev.map((v) => (v.id === targetVer.id ? { ...v, isInstalled: false } : v))
+      );
+      if (selectedVersion.id === targetVer.id) {
+        setSelectedVersion({ ...targetVer, isInstalled: false });
+      }
+    }
+  };
+
   // Add new offline account
   const handleAddOfflineAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,7 +468,7 @@ export function App() {
     }
   };
 
-  // Filter versions by loader and search query (sorted newest to oldest)
+  // Filter versions by loader and search query
   const filteredVersionsTab = fetchedVersionsList.filter((v) => {
     const matchesLoader = v.loader === versionTabLoader;
     const matchesSearch = v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
@@ -654,9 +690,9 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: GAME VERSIONS MANAGEMENT (CLASSIFIED LOADERS) ─── */}
+        {/* ─── TAB: GAME VERSIONS MANAGEMENT (SINGLE COLUMN ROW LIST) ─── */}
         {activeTab === "versions" && (
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -666,7 +702,7 @@ export function App() {
                   </span>
                 </div>
                 <p className="text-xs font-medium mt-1" style={{ color: subText }}>
-                  Danh sách phiên bản phân chia theo loại Loader (OptiFine thuộc Vanilla; Forge + OptiForge thuộc Forge; NeoForge, Fabric, Quilt, Iris).
+                  Danh sách phiên bản sắp xếp theo từng hàng ngăn nắp. Bạn có thể bấm nút Tải về hoặc Gỡ phiên bản trực tiếp.
                 </p>
               </div>
 
@@ -708,21 +744,23 @@ export function App() {
               })}
             </div>
 
-            {/* Versions Grid List Sorted (Newest to Oldest) */}
+            {/* Versions Vertical List — Each Version Takes Full Row */}
             {isLoadingVersions ? (
               <div className="py-16 text-center space-y-3">
                 <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
                 <p className="text-xs font-bold" style={{ color: subText }}>Đang tải danh sách phiên bản chính thức từ Mojang API...</p>
               </div>
             ) : filteredVersionsTab.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-3">
                 {filteredVersionsTab.map((v) => {
                   const isSelected = selectedVersion.id === v.id;
+                  const isInstalling = installingVersionId === v.id;
+
                   return (
                     <div
                       key={v.id}
                       onClick={() => setSelectedVersion(v)}
-                      className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-sm relative group flex items-center justify-between ${
+                      className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-sm relative group flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                         v.isInstalled
                           ? "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-500/10"
                           : isSelected
@@ -738,43 +776,65 @@ export function App() {
                         borderColor: v.isInstalled ? "#10b981" : isSelected ? "#6366f1" : itemBorderNormal,
                       }}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      {/* Left: Loader Badge, Title, Release Sub info */}
+                      <div className="flex items-center gap-4 min-w-0">
                         <LoaderBadge loader={v.loader} />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm truncate" style={{ color: titleText }}>{v.label}</span>
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-bold text-base truncate" style={{ color: titleText }}>{v.label}</span>
                             {v.isInstalled && (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500 text-white shadow-sm tracking-wider">
-                                INSTALLED
+                              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500 text-white shadow-sm tracking-wider flex items-center gap-1">
+                                <CheckCircle size={10} /> INSTALLED
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-medium" style={{ color: subText }}>{v.sub}</div>
+                          <div className="text-xs font-medium mt-0.5" style={{ color: subText }}>{v.sub}</div>
                         </div>
                       </div>
 
-                      <div>
+                      {/* Right Action Buttons: Play, Download (Checkmark if installed), Uninstall */}
+                      <div className="flex items-center gap-2.5 self-end md:self-auto" onClick={(e) => e.stopPropagation()}>
                         {v.isInstalled ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedVersion(v);
-                              handlePlay();
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-md"
-                          >
-                            <Play size={11} fill="currentColor" /> Play
-                          </button>
+                          <>
+                            {/* Icon Nút Download Có Chữ V (Checkmark) đại diện cho đã tải */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 font-extrabold text-xs">
+                              <CheckCircle size={15} />
+                              <span>Đã tải (V)</span>
+                            </div>
+
+                            {/* Nút Play */}
+                            <button
+                              onClick={() => {
+                                setSelectedVersion(v);
+                                handlePlay();
+                              }}
+                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-105"
+                            >
+                              <Play size={13} fill="currentColor" /> Play
+                            </button>
+
+                            {/* Nút Gỡ phiên bản */}
+                            <button
+                              onClick={() => handleUninstallVersion(v)}
+                              className="px-3 py-2 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 font-bold text-xs flex items-center gap-1 transition-all hover:scale-105"
+                              title="Gỡ phiên bản khỏi máy"
+                            >
+                              <Trash2 size={13} />
+                              <span className="hidden sm:inline">Gỡ</span>
+                            </button>
+                          </>
                         ) : (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedVersion(v);
-                            }}
-                            className="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 transition-all hover:scale-105"
-                            style={{ background: btnBg, borderColor: border, color: titleText }}
+                            disabled={isInstalling}
+                            onClick={() => handleInstallVersion(v)}
+                            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-105"
                           >
-                            <DownloadCloud size={12} /> Select
+                            {isInstalling ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Download size={13} />
+                            )}
+                            <span>{isInstalling ? "Downloading..." : "Tải về"}</span>
                           </button>
                         )}
                       </div>
