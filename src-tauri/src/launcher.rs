@@ -11,10 +11,20 @@ pub fn launch_game(
     let game_dir = PathBuf::from(&config.game_dir);
     let assets_dir = game_dir.join("assets");
     let libraries_dir = game_dir.join("libraries");
+    
+    // Tự động tìm Client Jar thích hợp (Fabric hoặc Vanilla)
     let version_dir = game_dir.join("versions").join(version_id);
     let client_jar = version_dir.join(format!("{}.jar", version_id));
 
-    let java_bin = if config.java_path.is_empty() {
+    // Fallback sang vanilla jar nếu bản mod loader chưa tạo jar riêng
+    let actual_jar = if client_jar.exists() {
+        client_jar
+    } else {
+        let vanilla_id = version_id.split('-').next().unwrap_or(version_id);
+        game_dir.join("versions").join(vanilla_id).join(format!("{}.jar", vanilla_id))
+    };
+
+    let java_bin = if config.java_path.trim().is_empty() {
         "java".to_string()
     } else {
         config.java_path.clone()
@@ -27,7 +37,7 @@ pub fn launch_game(
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
     let classpath = format!(
         "{}{}{}",
-        client_jar.to_string_lossy(),
+        actual_jar.to_string_lossy(),
         cp_separator,
         libraries_dir.join("*").to_string_lossy()
     );
@@ -69,11 +79,16 @@ pub fn launch_game(
         config.resolution_height.to_string(),
     ]);
 
-    let child = SysCommand::new(java_bin)
+    let child = SysCommand::new(&java_bin)
         .args(&args)
         .current_dir(&game_dir)
         .spawn()
-        .map_err(|e| format!("Failed to spawn Java Minecraft process: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "Không thể mở tiến trình Java ('{}'): {}.\nVui lòng đảm bảo máy bạn đã cài Java (JDK 17/21 cho Minecraft 1.17+) hoặc trỏ lại đường dẫn Java trong Settings!",
+                java_bin, e
+            )
+        })?;
 
     Ok(child.id())
 }
