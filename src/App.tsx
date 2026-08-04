@@ -313,7 +313,7 @@ export function App() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           {([
             { id: "home", label: "Home & News", icon: Newspaper },
-            { id: "mods", label: "Mods & Packs", icon: Layers },
+            { id: "mods", label: "Modpacks", icon: Layers },
             { id: "account", label: "Account", icon: User },
           ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
             <button
@@ -482,11 +482,11 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: MODS ─── */}
+        {/* ─── TAB: MODPACKS ─── */}
         {activeTab === "mods" && (
           <div className="max-w-7xl mx-auto space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-xl font-bold" style={{ color: titleText }}>Mods & Modpacks Gallery</h2>
+              <h2 className="text-xl font-bold" style={{ color: titleText }}>Modpacks Gallery</h2>
               <div className="relative w-full sm:w-64">
                 <Search size={14} className="absolute left-3 top-2.5" style={{ color: subText }} />
                 <input type="text" placeholder="Search mods..." className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border" style={{ background: inputBg, borderColor: border, color: titleText }} />
