@@ -1,21 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased select-none overflow-hidden;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  }
-  
-  h1, h2, h3, h4, .font-rajdhani {
-    font-family: 'Rajdhani', 'Inter', sans-serif;
-  }
-
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
-  }
-}
+@import "tailwindcss";
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
@@ -34,33 +17,4 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.5);
-}
-
-/* Glossy Glassmorphism Utility Classes */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.glass-panel-light {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-/* Emerald Pulsing Glow Animation */
-@keyframes emeraldGlow {
-  0%, 100% {
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.4), 0 0 50px rgba(16, 185, 129, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 35px rgba(16, 185, 129, 0.65), 0 0 70px rgba(16, 185, 129, 0.3);
-  }
-}
-
-.animate-emerald-glow {
-  animation: emeraldGlow 3s infinite ease-in-out;
 }
