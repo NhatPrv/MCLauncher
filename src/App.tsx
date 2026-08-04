@@ -5,7 +5,6 @@ import {
   Sun,
   Moon,
   ChevronDown,
-  RefreshCw,
   Folder,
   Play,
   Users,
@@ -31,6 +30,8 @@ import {
   Zap,
   Palette,
   Sparkles,
+  ListFilter,
+  DownloadCloud,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -60,7 +61,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 }
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
-type Tab = "home" | "mods" | "account";
+type Tab = "home" | "versions" | "mods" | "account";
 type LoaderType = "vanilla" | "fabric" | "forge" | "optifine";
 type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
 
@@ -70,6 +71,8 @@ interface VersionItem {
   sub: string;
   loader: LoaderType;
   versionStr: string;
+  isInstalled?: boolean;
+  releaseDate?: string;
 }
 
 interface ModrinthProject {
@@ -80,17 +83,7 @@ interface ModrinthProject {
   downloads: number;
   icon_url: string | null;
   project_type: string;
-  color?: string;
 }
-
-/* ─── Data ───────────────────────────────────────────────────────────────── */
-const VERSIONS: VersionItem[] = [
-  { id: "1.21.1",          label: "1.21.1",          sub: "Tricky Trials",    loader: "vanilla",  versionStr: "1.21.1" },
-  { id: "1.21.1-fabric",   label: "1.21.1 Fabric",   sub: "Loader 0.16.0",   loader: "fabric",   versionStr: "1.21.1" },
-  { id: "1.20.4-forge",    label: "1.20.4 Forge",    sub: "49.0.30",          loader: "forge",    versionStr: "1.20.4" },
-  { id: "1.20.1-optifine", label: "1.20.1 OptiFine", sub: "HD U I7 pre6",    loader: "optifine", versionStr: "1.20.1" },
-  { id: "1.19.4",          label: "1.19.4",          sub: "Vanilla",          loader: "vanilla",  versionStr: "1.19.4" },
-];
 
 const LOADER_META: Record<LoaderType, { emoji: string; color: string; bg: string; label: string }> = {
   vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla"  },
@@ -151,17 +144,25 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — MODRINTH REST API INTEGRATION
+   MAIN COMPONENT — LIVE MOJANG VERSIONS FETCHING & TAB MANAGEMENT
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
   const [activeTab, setActiveTab]             = useState<Tab>("home");
-  const [selectedVersion, setSelectedVersion] = useState(VERSIONS[0]);
   const [versionOpen, setVersionOpen]         = useState(false);
   const [accountDropOpen, setAccountDropOpen] = useState(false);
   const [isLaunching, setIsLaunching]       = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [noteIdx, setNoteIdx]                 = useState(0);
+
+  // Live Fetched Versions State
+  const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
+  const [selectedVersion, setSelectedVersion]         = useState<VersionItem>({
+    id: "1.21.1", label: "1.21.1", sub: "Tricky Trials", loader: "vanilla", versionStr: "1.21.1", isInstalled: true
+  });
+  const [versionTabLoader, setVersionTabLoader]     = useState<LoaderType>("vanilla");
+  const [isLoadingVersions, setIsLoadingVersions]   = useState(false);
+  const [versionSearchQuery, setVersionSearchQuery] = useState("");
 
   // Modrinth API Gallery State
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>("all");
@@ -174,7 +175,6 @@ export function App() {
     { username: "Steve_MC_2024", uuid: "c0618b45-4202-3ac8-9f20-94d3fd4695ec", access_token: "ms_token", account_type: "Microsoft" },
     { username: "Alex_Offline", uuid: "d1729c56-5313-4bd9-a031-05e4fe5706fd", access_token: "offline_token", account_type: "Offline" },
   ]);
-
   const [account, setAccount] = useState<Account | null>(accountsList[0]);
 
   // Form states
@@ -194,6 +194,60 @@ export function App() {
     game_dir: "./.minecraft",
     theme: "dark",
   });
+
+  /* ── Fetch Real Minecraft Game Versions from Mojang API ── */
+  const fetchRealGameVersions = useCallback(async () => {
+    setIsLoadingVersions(true);
+    try {
+      const res = await fetch("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
+      if (res.ok) {
+        const data = await res.json();
+        const releaseEntries = (data.versions || []).filter((v: any) => v.type === "release");
+
+        const parsedVersions: VersionItem[] = releaseEntries.map((v: any) => {
+          const isInstalled = v.id === "1.21.1" || v.id === "1.20.1" || v.id === "1.19.4";
+          return {
+            id: v.id,
+            label: v.id,
+            sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
+            loader: "vanilla",
+            versionStr: v.id,
+            isInstalled,
+            releaseDate: v.releaseTime,
+          };
+        });
+
+        // Add popular loader variants for 1.21.1 and 1.20.1
+        const fabricVariants: VersionItem[] = [
+          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: true },
+          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: false },
+          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: false },
+        ];
+        const forgeVariants: VersionItem[] = [
+          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: true },
+          { id: "1.20.1-forge", label: "1.20.1 Forge", sub: "Forge 47.2.0", loader: "forge", versionStr: "1.20.1", isInstalled: false },
+        ];
+        const optifineVariants: VersionItem[] = [
+          { id: "1.20.1-optifine", label: "1.20.1 OptiFine", sub: "HD U I7 pre6", loader: "optifine", versionStr: "1.20.1", isInstalled: true },
+          { id: "1.19.4-optifine", label: "1.19.4 OptiFine", sub: "HD U I4", loader: "optifine", versionStr: "1.19.4", isInstalled: false },
+        ];
+
+        const fullList = [...fabricVariants, ...forgeVariants, ...optifineVariants, ...parsedVersions];
+        setFetchedVersionsList(fullList);
+        if (fullList.length > 0 && !selectedVersion) {
+          setSelectedVersion(fullList[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi fetch phiên bản Mojang:", err);
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  }, [selectedVersion]);
+
+  useEffect(() => {
+    fetchRealGameVersions();
+  }, [fetchRealGameVersions]);
 
   /* ── Modrinth API Fetcher ── */
   const fetchModrinthData = useCallback(async (cat: CategoryType, query: string) => {
@@ -235,7 +289,6 @@ export function App() {
     }
   }, []);
 
-  // Trigger Modrinth Fetch when Tab, Category, or Search changes
   useEffect(() => {
     if (activeTab === "mods") {
       const timer = setTimeout(() => {
@@ -346,6 +399,14 @@ export function App() {
     }
   };
 
+  // Filter versions by loader and search query
+  const filteredVersionsTab = fetchedVersionsList.filter((v) => {
+    const matchesLoader = v.loader === versionTabLoader;
+    const matchesSearch = v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
+                          v.sub.toLowerCase().includes(versionSearchQuery.toLowerCase());
+    return matchesLoader && matchesSearch;
+  });
+
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
   const subText      = dark ? "#94a3b8" : "#475569";
@@ -386,10 +447,11 @@ export function App() {
           </div>
         </div>
 
-        {/* Center Tabs */}
+        {/* Center Tabs — Home & News, Versions, Modpacks, Account */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {([
             { id: "home", label: "Home & News", icon: Newspaper },
+            { id: "versions", label: "Versions", icon: ListFilter },
             { id: "mods", label: "Modpacks", icon: Layers },
             { id: "account", label: "Account", icon: User },
           ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
@@ -556,6 +618,142 @@ export function App() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ─── TAB: GAME VERSIONS MANAGEMENT (FETCHED LIVE FROM MOJANG) ─── */}
+        {activeTab === "versions" && (
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Minecraft Game Versions</h2>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                    Mojang API Official
+                  </span>
+                </div>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Danh sách các phiên bản game chính thức tải từ Mojang API. Phiên bản đã tải được Highlight màu xanh nổi bật.</p>
+              </div>
+
+              <div className="relative w-full md:w-72">
+                <Search size={14} className="absolute left-3 top-3" style={{ color: subText }} />
+                <input
+                  type="text"
+                  value={versionSearchQuery}
+                  onChange={(e) => setVersionSearchQuery(e.target.value)}
+                  placeholder="Tìm phiên bản (VD: 1.21.1, 1.20)..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
+                  style={{ background: inputBg, borderColor: border, color: titleText }}
+                />
+              </div>
+            </div>
+
+            {/* Sub-tabs / Loader Category Filter Chips */}
+            <div className="flex items-center gap-2 border-b pb-3" style={{ borderColor: border }}>
+              {(["vanilla", "fabric", "forge", "optifine"] as LoaderType[]).map((loaderKey) => {
+                const meta = LOADER_META[loaderKey];
+                const isActive = versionTabLoader === loaderKey;
+                return (
+                  <button
+                    key={loaderKey}
+                    onClick={() => setVersionTabLoader(loaderKey)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 border ${
+                      isActive ? "shadow-md scale-[1.02]" : "hover:scale-[1.01]"
+                    }`}
+                    style={{
+                      background: isActive ? meta.bg : btnBg,
+                      borderColor: isActive ? meta.color : border,
+                      color: isActive ? meta.color : titleText,
+                    }}
+                  >
+                    <span>{meta.emoji}</span>
+                    <span>{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Versions Grid List Sorted (Newest to Oldest) */}
+            {isLoadingVersions ? (
+              <div className="py-16 text-center space-y-3">
+                <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
+                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải danh sách phiên bản chính thức từ Mojang API...</p>
+              </div>
+            ) : filteredVersionsTab.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredVersionsTab.map((v) => {
+                  const isSelected = selectedVersion.id === v.id;
+                  return (
+                    <div
+                      key={v.id}
+                      onClick={() => setSelectedVersion(v)}
+                      className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-sm relative group flex items-center justify-between ${
+                        v.isInstalled
+                          ? "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-500/10"
+                          : isSelected
+                          ? "ring-2 ring-indigo-500 border-indigo-500"
+                          : "hover:border-emerald-500/50 hover:shadow-md"
+                      }`}
+                      style={{
+                        background: v.isInstalled
+                          ? dark ? "rgba(16,185,129,0.12)" : "rgba(16,185,129,0.08)"
+                          : isSelected
+                          ? dark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)"
+                          : itemBgNormal,
+                        borderColor: v.isInstalled ? "#10b981" : isSelected ? "#6366f1" : itemBorderNormal,
+                      }}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <LoaderBadge loader={v.loader} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm truncate" style={{ color: titleText }}>{v.label}</span>
+                            {v.isInstalled && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500 text-white shadow-sm tracking-wider">
+                                INSTALLED
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-medium" style={{ color: subText }}>{v.sub}</div>
+                        </div>
+                      </div>
+
+                      <div>
+                        {v.isInstalled ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVersion(v);
+                              handlePlay();
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-md"
+                          >
+                            <Play size={11} fill="currentColor" /> Play
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVersion(v);
+                            }}
+                            className="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 transition-all hover:scale-105"
+                            style={{ background: btnBg, borderColor: border, color: titleText }}
+                          >
+                            <DownloadCloud size={12} /> Select
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-16 text-center" style={{ color: subText }}>
+                <Search size={36} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-bold">Không tìm thấy phiên bản phù hợp</p>
+                <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn Tab loader khác.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -966,35 +1164,55 @@ export function App() {
           )}
         </div>
 
-        {/* Center: Version Selector Dropdown */}
+        {/* Center: Version Selector Dropdown & Open Versions Tab Button */}
         <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
           <div className="relative flex-1">
             <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
               <LoaderBadge loader={selectedVersion.loader} />
-              <div className="flex-1 text-left">
-                <div className="font-bold text-xs" style={{ color: titleText }}>{selectedVersion.label}</div>
-                <div className="text-[9px] font-medium" style={{ color: subText }}>{selectedVersion.sub}</div>
+              <div className="flex-1 text-left min-w-0">
+                <div className="font-bold text-xs truncate" style={{ color: titleText }}>{selectedVersion.label}</div>
+                <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{selectedVersion.sub}</div>
               </div>
               <ChevronDown size={13} className={`transition-transform ${versionOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
             </button>
 
             {versionOpen && (
-              <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1 shadow-2xl z-50 backdrop-blur-xl border" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
-                {VERSIONS.map((v) => (
-                  <button key={v.id} onClick={() => { setSelectedVersion(v); setVersionOpen(false); }} className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs text-left transition-colors ${selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"}`} style={{ color: titleText }}>
-                    <LoaderBadge loader={v.loader} />
-                    <div>
-                      <div className="font-bold">{v.label}</div>
-                      <div className="text-[9px] font-medium" style={{ color: subText }}>{v.sub}</div>
+              <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border max-h-60 overflow-y-auto" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
+                {fetchedVersionsList.slice(0, 15).map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => { setSelectedVersion(v); setVersionOpen(false); }}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs text-left transition-colors mb-0.5 ${
+                      selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"
+                    }`}
+                    style={{ color: titleText }}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <LoaderBadge loader={v.loader} />
+                      <div className="min-w-0">
+                        <div className="font-bold truncate">{v.label}</div>
+                        <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{v.sub}</div>
+                      </div>
                     </div>
+
+                    {v.isInstalled && (
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-500 text-white">INSTALLED</span>
+                    )}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          <button className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }}>
-            <RefreshCw size={14} />
+          {/* Button Xem Tất Cả Phiên Bản (Dẫn Sang Tab Versions) */}
+          <button
+            onClick={() => setActiveTab("versions")}
+            className="h-9 px-3 rounded-xl flex items-center gap-1.5 transition-all hover:scale-105 border shadow-sm text-xs font-bold"
+            style={{ background: btnBg, borderColor: border, color: titleText }}
+            title="Xem danh sách tất cả các phiên bản"
+          >
+            <ListFilter size={14} className="text-emerald-500" />
+            <span className="hidden md:inline">Versions</span>
           </button>
         </div>
 
