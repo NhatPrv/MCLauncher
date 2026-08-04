@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Shield,
   Settings,
@@ -30,7 +30,6 @@ import {
   Package,
   Zap,
   Palette,
-  Image as ImageIcon,
   Sparkles,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
@@ -63,7 +62,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Tab = "home" | "mods" | "account";
 type LoaderType = "vanilla" | "fabric" | "forge" | "optifine";
-type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "texturepack" | "shader";
+type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
 
 interface VersionItem {
   id: string;
@@ -73,17 +72,15 @@ interface VersionItem {
   versionStr: string;
 }
 
-interface GalleryItem {
-  id: number;
-  name: string;
+interface ModrinthProject {
+  project_id: string;
+  title: string;
+  description: string;
   author: string;
-  category: CategoryType;
-  categoryLabel: string;
-  downloads: string;
-  rating: number;
-  icon: string;
-  desc: string;
-  color: string;
+  downloads: number;
+  icon_url: string | null;
+  project_type: string;
+  color?: string;
 }
 
 /* ─── Data ───────────────────────────────────────────────────────────────── */
@@ -116,22 +113,12 @@ const PATCH_NOTES = [
   "Crafter block — the first semi-automated crafting station",
 ];
 
-const CATEGORIES: { id: CategoryType; label: string; icon: React.ElementType; color: string }[] = [
+const CATEGORIES: { id: CategoryType; label: string; icon: React.ElementType; color: string; projectType?: string }[] = [
   { id: "all",          label: "Tất cả",          icon: Layers,    color: "#10b981" },
-  { id: "modpack",      label: "Modpacks",        icon: Package,   color: "#818cf8" },
-  { id: "mod",          label: "Mods",            icon: Zap,       color: "#f59e0b" },
-  { id: "resourcepack", label: "Resource Packs", icon: Palette,   color: "#ec4899" },
-  { id: "texturepack",  label: "Texture Packs",  icon: ImageIcon, color: "#84cc16" },
-  { id: "shader",       label: "Shaders",         icon: Sparkles,  color: "#06b6d4" },
-];
-
-const GALLERY_ITEMS: GalleryItem[] = [
-  { id: 1, name: "RLCraft Deluxe 1.21", author: "Shivaxi", category: "modpack", categoryLabel: "Modpack", downloads: "14.2M", rating: 4.9, icon: "🐉", desc: "Modpack sinh tồn thử thách khắc nghiệt nhất lịch sử Minecraft.", color: "#818cf8" },
-  { id: 2, name: "Sodium FPS Booster", author: "CaffeineMC", category: "mod", categoryLabel: "Mod", downloads: "24.5M", rating: 4.9, icon: "⚡", desc: "Tối ưu hóa render engine gia tăng FPS tối đa 120+.", color: "#f59e0b" },
-  { id: 3, name: "Complementary Shaders Unbound", author: "EminGT", category: "shader", categoryLabel: "Shader", downloads: "18.2M", rating: 4.9, icon: "✨", desc: "Hiệu ứng Ray-Tracing chiếu sáng mượt mà và mây khối 3D.", color: "#06b6d4" },
-  { id: 4, name: "Faithful 64x HD", author: "FaithfulTeam", category: "texturepack", categoryLabel: "Texture Pack", downloads: "32.1M", rating: 5.0, icon: "🖼️", desc: "Kết cấu đồ họa nét gấp 4 lần giữ nguyên phong cách Minecraft gốc.", color: "#84cc16" },
-  { id: 5, name: "Bare Bones Resource Pack", author: "RobotPanda", category: "resourcepack", categoryLabel: "Resource Pack", downloads: "11.4M", rating: 4.8, icon: "🎨", desc: "Đưa đồ họa game giống hệt như các video Minecraft Trailer chính thức.", color: "#ec4899" },
-  { id: 6, name: "All The Mods 9 (ATM9)", author: "ATMTeam", category: "modpack", categoryLabel: "Modpack", downloads: "8.7M", rating: 4.8, icon: "🎒", desc: "Gói tổng hợp hơn 400+ Mods kỹ thuật, ma thuật và thám hiểm.", color: "#818cf8" },
+  { id: "modpack",      label: "Modpacks",        icon: Package,   color: "#818cf8", projectType: "modpack" },
+  { id: "mod",          label: "Mods",            icon: Zap,       color: "#f59e0b", projectType: "mod" },
+  { id: "resourcepack", label: "Resource Packs", icon: Palette,   color: "#ec4899", projectType: "resourcepack" },
+  { id: "shader",       label: "Shaders",         icon: Sparkles,  color: "#06b6d4", projectType: "shader" },
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -157,8 +144,14 @@ function LoaderBadge({ loader }: { loader: LoaderType }) {
   );
 }
 
+function formatDownloads(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+  return num.toString();
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — MODPACKS & RESOURCES GALLERY WITH CATEGORY FILTERS
+   MAIN COMPONENT — MODRINTH REST API INTEGRATION
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -170,9 +163,11 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [noteIdx, setNoteIdx]                 = useState(0);
 
-  // Gallery Filters
+  // Modrinth API Gallery State
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>("all");
   const [searchQuery, setSearchQuery]           = useState("");
+  const [modrinthItems, setModrinthItems]       = useState<ModrinthProject[]>([]);
+  const [isLoadingApi, setIsLoadingApi]         = useState(false);
 
   // Account Management State
   const [accountsList, setAccountsList] = useState<Account[]>([
@@ -199,6 +194,56 @@ export function App() {
     game_dir: "./.minecraft",
     theme: "dark",
   });
+
+  /* ── Modrinth API Fetcher ── */
+  const fetchModrinthData = useCallback(async (cat: CategoryType, query: string) => {
+    setIsLoadingApi(true);
+    try {
+      let facetsArr: string[] = [];
+      const selectedCatObj = CATEGORIES.find(c => c.id === cat);
+      if (selectedCatObj && selectedCatObj.projectType) {
+        facetsArr.push(`["project_type:${selectedCatObj.projectType}"]`);
+      }
+      const facetsParam = facetsArr.length > 0 ? `[${facetsArr.join(",")}]` : undefined;
+
+      const params = new URLSearchParams();
+      if (query.trim()) params.append("query", query.trim());
+      if (facetsParam) params.append("facets", facetsParam);
+      params.append("limit", "24");
+      params.append("index", "downloads");
+
+      const res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`, {
+        headers: { "User-Agent": "NhatPrv/MCLauncher/4.2.1" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const hits: ModrinthProject[] = (data.hits || []).map((h: any) => ({
+          project_id: h.project_id,
+          title: h.title,
+          description: h.description,
+          author: h.author,
+          downloads: h.downloads,
+          icon_url: h.icon_url,
+          project_type: h.project_type,
+        }));
+        setModrinthItems(hits);
+      }
+    } catch (err) {
+      console.error("Modrinth API fetch error:", err);
+    } finally {
+      setIsLoadingApi(false);
+    }
+  }, []);
+
+  // Trigger Modrinth Fetch when Tab, Category, or Search changes
+  useEffect(() => {
+    if (activeTab === "mods") {
+      const timer = setTimeout(() => {
+        fetchModrinthData(selectedCategory, searchQuery);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, selectedCategory, searchQuery, fetchModrinthData]);
 
   /* ── Effects */
   useEffect(() => {
@@ -300,15 +345,6 @@ export function App() {
       setAccount(updatedList.length > 0 ? updatedList[0] : null);
     }
   };
-
-  // Filtered gallery items
-  const filteredGallery = GALLERY_ITEMS.filter((item) => {
-    const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
-    const matchesSearch   = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.desc.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.author.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
 
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
@@ -523,14 +559,19 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: MODPACKS & CONTENT GALLERY WITH CATEGORY FILTERS ─── */}
+        {/* ─── TAB: MODPACKS & MODRINTH REAL API GALLERY ─── */}
         {activeTab === "mods" && (
           <div className="max-w-7xl mx-auto space-y-5">
             {/* Gallery Header & Search Bar */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Modpacks & Content Gallery</h2>
-                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Tải về các bộ Modpack, Mods, Texture Packs, Resource Packs và Shaders chất lượng cao.</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Modpacks & Content Gallery</h2>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                    Modrinth API Live
+                  </span>
+                </div>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Khám phá và tải trực tiếp Modpacks, Mods, Shaders và Resource Packs từ máy chủ Modrinth chính thức.</p>
               </div>
 
               <div className="relative w-full md:w-72">
@@ -551,7 +592,7 @@ export function App() {
               </div>
             </div>
 
-            {/* Category Filter Chips / Tabs */}
+            {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
               {CATEGORIES.map((cat) => {
                 const Icon = cat.icon;
@@ -578,53 +619,63 @@ export function App() {
               })}
             </div>
 
-            {/* Gallery Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredGallery.length > 0 ? (
-                filteredGallery.map((m) => (
-                  <div
-                    key={m.id}
-                    className="p-5 rounded-2xl border flex flex-col justify-between transition-all hover:scale-[1.01] shadow-sm group"
-                    style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-sm" style={{ background: dark ? "rgba(30,41,59,0.8)" : "#e2e8f0" }}>
-                          {m.icon}
+            {/* Gallery Items Grid (Modrinth REST API Data) */}
+            {isLoadingApi ? (
+              <div className="py-16 text-center space-y-3">
+                <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
+                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải dữ liệu thực tế từ Modrinth API...</p>
+              </div>
+            ) : modrinthItems.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {modrinthItems.map((item) => {
+                  const catConfig = CATEGORIES.find(c => c.projectType === item.project_type) || CATEGORIES[0];
+                  return (
+                    <div
+                      key={item.project_id}
+                      className="p-5 rounded-2xl border flex flex-col justify-between transition-all hover:scale-[1.01] shadow-sm group"
+                      style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          {item.icon_url ? (
+                            <img src={item.icon_url} alt="" className="w-11 h-11 rounded-2xl object-cover shadow-sm flex-shrink-0" />
+                          ) : (
+                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 shadow-sm" style={{ background: dark ? "rgba(30,41,59,0.8)" : "#e2e8f0" }}>
+                              📦
+                            </div>
+                          )}
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider" style={{ background: `${catConfig.color}22`, color: catConfig.color, border: `1px solid ${catConfig.color}33` }}>
+                            {catConfig.label}
+                          </span>
                         </div>
-                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider" style={{ background: `${m.color}22`, color: m.color, border: `1px solid ${m.color}33` }}>
-                          {m.categoryLabel}
-                        </span>
+
+                        <h4 className="font-bold text-sm mb-1 group-hover:text-emerald-500 transition-colors line-clamp-1" style={{ color: titleText }}>{item.title}</h4>
+                        <p className="text-xs leading-relaxed line-clamp-2 font-medium mb-3" style={{ color: subText }}>{item.description || "Không có mô tả chi tiết."}</p>
                       </div>
 
-                      <h4 className="font-bold text-sm mb-1 group-hover:text-emerald-500 transition-colors" style={{ color: titleText }}>{m.name}</h4>
-                      <p className="text-xs leading-relaxed line-clamp-2 font-medium mb-3" style={{ color: subText }}>{m.desc}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: border }}>
-                      <div className="flex items-center gap-3 text-[11px] font-bold">
-                        <div className="flex items-center gap-1 text-amber-400">
-                          <Star size={11} fill="currentColor" />
-                          <span>{m.rating}</span>
+                      <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: border }}>
+                        <div className="flex items-center gap-2 text-[11px] font-bold" style={{ color: subText }}>
+                          <span>by <strong style={{ color: titleText }}>{item.author}</strong></span>
+                          <span>•</span>
+                          <span className="text-emerald-500 font-extrabold">{formatDownloads(item.downloads)} downloads</span>
                         </div>
-                        <span style={{ color: subText }}>{m.downloads}</span>
-                      </div>
 
-                      <button className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md">
-                        <Download size={12} />
-                        <span>Install</span>
-                      </button>
+                        <button className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md">
+                          <Download size={12} />
+                          <span>Install</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div className="col-span-full py-12 text-center" style={{ color: subText }}>
-                  <Search size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-bold">Không tìm thấy nội dung phù hợp</p>
-                  <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn danh mục khác.</p>
-                </div>
-              )}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-16 text-center" style={{ color: subText }}>
+                <Search size={36} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-bold">Không tìm thấy nội dung phù hợp trên Modrinth</p>
+                <p className="text-xs mt-1">Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.</p>
+              </div>
+            )}
           </div>
         )}
 
