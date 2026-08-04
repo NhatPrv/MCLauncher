@@ -47,7 +47,7 @@ function MicrosoftIcon({ size = 16 }: { size?: number }) {
 function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
   return (
     <div
-      className="rounded-full flex items-center justify-center bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex-shrink-0"
+      className="rounded-full flex items-center justify-center bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex-shrink-0 shadow-sm"
       style={{ width: size, height: size }}
     >
       <User size={Math.max(10, Math.floor(size * 0.65))} />
@@ -130,7 +130,7 @@ function LoaderBadge({ loader }: { loader: LoaderType }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — ADVANCED ACCOUNT MANAGEMENT SYSTEM
+   MAIN COMPONENT — PROMINENT CARDS & INSTANT CLICK TO SELECT
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -270,13 +270,18 @@ export function App() {
   };
 
   /* ── Dynamic Contrast Color Tokens */
-  const border     = dark ? "#1e293b" : "#cbd5e1";
-  const subText    = dark ? "#94a3b8" : "#475569";
-  const titleText  = dark ? "#f8fafc" : "#0f172a";
-  const cardBg     = dark ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.92)";
-  const heroBg     = dark ? "#0c1322" : "#f1f5f9";
-  const btnBg      = dark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)";
-  const inputBg    = dark ? "rgba(15,23,42,0.8)" : "#ffffff";
+  const border       = dark ? "#334155" : "#cbd5e1";
+  const subText      = dark ? "#94a3b8" : "#475569";
+  const titleText    = dark ? "#f8fafc" : "#0f172a";
+  const cardBg       = dark ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.92)";
+  const heroBg       = dark ? "#0c1322" : "#f1f5f9";
+  const btnBg        = dark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)";
+  const inputBg      = dark ? "rgba(15,23,42,0.8)" : "#ffffff";
+
+  // Prominent Account Item Background Tokens (Nổi hơn giao diện 1 tí)
+  const itemBgNormal = dark ? "#1e293b" : "#ffffff";
+  const itemBgActive = dark ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.08)";
+  const itemBorderNormal = dark ? "#334155" : "#cbd5e1";
 
   return (
     <div className={`w-screen h-screen flex flex-col overflow-hidden select-none transition-colors duration-200 ${dark ? "dark bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
@@ -506,7 +511,7 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: ACCOUNT MANAGEMENT (2-COLUMN SPLIT) ─── */}
+        {/* ─── TAB: ACCOUNT MANAGEMENT (PROMINENT CARDS & INSTANT CLICK SELECT) ─── */}
         {activeTab === "account" && (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
@@ -514,7 +519,7 @@ export function App() {
                 <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Account Management</h2>
                 <p className="text-xs font-medium mt-1" style={{ color: subText }}>Quản lý danh sách tài khoản đã kết nối và thêm tài khoản mới vào ứng dụng.</p>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold" style={{ background: cardBg, borderColor: border, color: titleText }}>
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold shadow-sm" style={{ background: dark ? "#1e293b" : "#ffffff", borderColor: border, color: titleText }}>
                 <UserCheck size={14} className="text-emerald-500" />
                 <span>{accountsList.length} Accounts Saved</span>
               </div>
@@ -523,7 +528,7 @@ export function App() {
             {/* 2-Column Layout Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* ── LEFT HALF: Existing Accounts List ── */}
+              {/* ── LEFT HALF: Existing Accounts List (Instant Click Select) ── */}
               <div className="space-y-4">
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Users size={15} className="text-emerald-500" />
@@ -538,15 +543,27 @@ export function App() {
                     return (
                       <div
                         key={accItem.uuid}
-                        className={`p-4 rounded-2xl border transition-all duration-200 shadow-sm relative ${isActive ? "ring-2 ring-emerald-500/50" : ""}`}
-                        style={{ background: cardBg, borderColor: isActive ? "#10b981" : border }}
+                        onClick={() => {
+                          if (!isEditing) {
+                            setAccount(accItem);
+                          }
+                        }}
+                        className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-sm relative group ${
+                          isActive
+                            ? "ring-2 ring-emerald-500 border-emerald-500 shadow-md shadow-emerald-500/10 scale-[1.01]"
+                            : "hover:border-emerald-500/50 hover:shadow-md hover:scale-[1.005]"
+                        }`}
+                        style={{
+                          background: isActive ? itemBgActive : itemBgNormal,
+                          borderColor: isActive ? "#10b981" : itemBorderNormal,
+                        }}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="flex items-center gap-3.5 min-w-0 flex-1">
                             {/* Account Type Icon (Microsoft / Offline) */}
                             {accItem.account_type === "Microsoft" ? (
-                              <div className="w-10 h-10 rounded-xl bg-slate-900/80 border border-slate-700/50 flex items-center justify-center flex-shrink-0 shadow-sm">
-                                <MicrosoftIcon size={18} />
+                              <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-md border border-slate-700/50">
+                                <MicrosoftIcon size={20} />
                               </div>
                             ) : (
                               <OfflineAvatarIcon size={40} />
@@ -554,7 +571,7 @@ export function App() {
 
                             <div className="min-w-0 flex-1">
                               {isEditing ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="text"
                                     value={editNameInput}
@@ -565,7 +582,7 @@ export function App() {
                                   />
                                   <button
                                     onClick={() => handleSaveEditAccount(accItem)}
-                                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm"
                                   >
                                     <Check size={14} />
                                   </button>
@@ -573,54 +590,46 @@ export function App() {
                               ) : (
                                 <>
                                   <div className="flex items-center gap-2">
-                                    <span className="font-bold text-sm truncate" style={{ color: titleText }}>{accItem.username}</span>
+                                    <span className="font-bold text-sm truncate group-hover:text-emerald-500 transition-colors" style={{ color: titleText }}>
+                                      {accItem.username}
+                                    </span>
                                     {isActive && (
-                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                                      <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500 text-white shadow-sm tracking-wider">
                                         ACTIVE
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
+                                  <div className="flex items-center gap-2.5 mt-0.5">
                                     <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: accItem.account_type === "Microsoft" ? "#00A4EF" : "#10b981" }}>
                                       {accItem.account_type === "Microsoft" ? <MicrosoftIcon size={10} /> : <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
                                       {accItem.account_type}
                                     </span>
-                                    <span className="text-[9px] font-mono" style={{ color: subText }}>UUID: {accItem.uuid.substring(0, 8)}...</span>
+                                    <span className="text-[9px] font-mono font-medium" style={{ color: subText }}>UUID: {accItem.uuid.substring(0, 8)}...</span>
                                   </div>
                                 </>
                               )}
                             </div>
                           </div>
 
-                          {/* Action Buttons: Switch / Edit Pencil / Delete Trash */}
-                          <div className="flex items-center gap-1.5 ml-2">
-                            {!isActive && (
-                              <button
-                                onClick={() => setAccount(accItem)}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors"
-                                style={{ background: btnBg, borderColor: border, color: titleText }}
-                              >
-                                Select
-                              </button>
-                            )}
-
+                          {/* Action Buttons: Edit Pencil & Delete Trash */}
+                          <div className="flex items-center gap-1.5 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => {
                                 setEditingAccount(accItem);
                                 setEditNameInput(accItem.username);
                               }}
-                              className="p-2 rounded-xl transition-all border hover:scale-105"
+                              className="p-2 rounded-xl transition-all border hover:scale-105 shadow-sm"
                               style={{ background: btnBg, borderColor: border, color: subText }}
-                              title="Edit account name"
+                              title="Sửa tên tài khoản"
                             >
                               <Pencil size={13} />
                             </button>
 
                             <button
                               onClick={() => handleDeleteAccount(accItem)}
-                              className="p-2 rounded-xl transition-all border hover:scale-105 hover:text-red-500 hover:border-red-500/50"
+                              className="p-2 rounded-xl transition-all border hover:scale-105 hover:text-red-500 hover:border-red-500/50 shadow-sm"
                               style={{ background: btnBg, borderColor: border, color: subText }}
-                              title="Remove account from app"
+                              title="Xóa tài khoản khỏi app"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -640,9 +649,9 @@ export function App() {
                 </h3>
 
                 {/* Option 1: Microsoft Online Account */}
-                <div className="p-5 rounded-2xl border space-y-3 shadow-sm transition-all hover:border-blue-500/50" style={{ background: cardBg, borderColor: border }}>
+                <div className="p-5 rounded-2xl border space-y-3.5 shadow-md transition-all hover:border-blue-500/50" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900/80 border border-slate-700/50 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-md border border-slate-700/50">
                       <MicrosoftIcon size={20} />
                     </div>
                     <div>
@@ -667,7 +676,7 @@ export function App() {
                 </div>
 
                 {/* Option 2: Offline Account (Cracked) */}
-                <div className="p-5 rounded-2xl border space-y-3 shadow-sm transition-all hover:border-emerald-500/50" style={{ background: cardBg, borderColor: border }}>
+                <div className="p-5 rounded-2xl border space-y-3.5 shadow-md transition-all hover:border-emerald-500/50" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                   <div className="flex items-center gap-3">
                     <OfflineAvatarIcon size={40} />
                     <div>
@@ -708,12 +717,11 @@ export function App() {
         <div className="relative" ref={accDropRef}>
           <div
             onClick={() => setAccountDropOpen(!accountDropOpen)}
-            className="flex items-center gap-3 px-3.5 py-2 rounded-xl cursor-pointer transition-all hover:scale-[1.01] border"
+            className="flex items-center gap-3 px-3.5 py-2 rounded-xl cursor-pointer transition-all hover:scale-[1.01] border shadow-sm"
             style={{ background: btnBg, borderColor: border, minWidth: 170 }}
           >
-            {/* Display Microsoft or Offline Icon */}
             {account?.account_type === "Microsoft" ? (
-              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-sm border border-slate-700/50">
+              <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-sm border border-slate-700/50">
                 <MicrosoftIcon size={15} />
               </div>
             ) : (
@@ -738,7 +746,7 @@ export function App() {
             >
               <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
                 <span>Select User Account</span>
-                <span className="text-emerald-500">{accountsList.length} saved</span>
+                <span className="text-emerald-500 font-extrabold">{accountsList.length} saved</span>
               </div>
 
               <div className="max-h-48 overflow-y-auto space-y-1">
@@ -793,7 +801,7 @@ export function App() {
         {/* Center: Version Selector Dropdown */}
         <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
           <div className="relative flex-1">
-            <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border" style={{ background: btnBg, borderColor: border }}>
+            <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
               <LoaderBadge loader={selectedVersion.loader} />
               <div className="flex-1 text-left">
                 <div className="font-bold text-xs" style={{ color: titleText }}>{selectedVersion.label}</div>
@@ -817,17 +825,17 @@ export function App() {
             )}
           </div>
 
-          <button className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border" style={{ background: btnBg, borderColor: border, color: subText }}>
+          <button className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }}>
             <RefreshCw size={14} />
           </button>
         </div>
 
         {/* Right: Quick Actions & PLAY Button */}
         <div className="flex items-center gap-2.5">
-          <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
+          <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
             <Folder size={14} />
           </button>
-          <button onClick={() => setIsSettingsOpen(true)} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border" style={{ background: btnBg, borderColor: border, color: subText }} title="Settings">
+          <button onClick={() => setIsSettingsOpen(true)} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Settings">
             <Settings size={14} />
           </button>
 
