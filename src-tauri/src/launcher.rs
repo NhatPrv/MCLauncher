@@ -1,7 +1,21 @@
 use std::process::Command as SysCommand;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::fs;
 use crate::config::AppConfig;
 use crate::auth::Account;
+
+fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_jars_recursive(&path, jar_paths);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("jar") {
+                jar_paths.push(path.to_string_lossy().to_string());
+            }
+        }
+    }
+}
 
 pub fn launch_game(
     version_id: &str,
@@ -12,7 +26,7 @@ pub fn launch_game(
     let assets_dir = game_dir.join("assets");
     let libraries_dir = game_dir.join("libraries");
     
-    // Tự động tìm Client Jar thích hợp (Fabric hoặc Vanilla)
+    // Tự động tìm Client Jar thích hợp
     let version_dir = game_dir.join("versions").join(version_id);
     let client_jar = version_dir.join(format!("{}.jar", version_id));
 
@@ -24,6 +38,13 @@ pub fn launch_game(
         game_dir.join("versions").join(vanilla_id).join(format!("{}.jar", vanilla_id))
     };
 
+    if !actual_jar.exists() {
+        return Err(format!(
+            "Không tìm thấy file game jar tại: '{}'. Vui lòng bấm nút 'Tải về' trên giao diện!",
+            actual_jar.display()
+        ));
+    }
+
     let java_bin = if config.java_path.trim().is_empty() {
         "java".to_string()
     } else {
@@ -33,14 +54,15 @@ pub fn launch_game(
     let min_ram_arg = format!("-Xms{}M", config.min_ram_mb);
     let max_ram_arg = format!("-Xmx{}M", config.max_ram_mb);
 
+    // Thu thập 100% các file Libraries JAR thực tế
+    let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
+    if libraries_dir.exists() {
+        collect_jars_recursive(&libraries_dir, &mut jar_list);
+    }
+
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
-    let classpath = format!(
-        "{}{}{}",
-        actual_jar.to_string_lossy(),
-        cp_separator,
-        libraries_dir.join("*").to_string_lossy()
-    );
+    let classpath = jar_list.join(cp_separator);
 
     let mut args: Vec<String> = vec![
         min_ram_arg,
@@ -85,7 +107,7 @@ pub fn launch_game(
         .spawn()
         .map_err(|e| {
             format!(
-                "Không thể mở tiến trình Java ('{}'): {}.\nVui lòng đảm bảo máy bạn đã cài Java (JDK 17/21 cho Minecraft 1.17+) hoặc trỏ lại đường dẫn Java trong Settings!",
+                "Không thể mở tiến trình Java ('{}'): {}.\nVui lòng mở Tab Settings và dán đường dẫn file java.exe thuộc JDK 17 hoặc JDK 21!",
                 java_bin, e
             )
         })?;

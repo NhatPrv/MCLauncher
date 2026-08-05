@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use crate::downloader::verify_and_download_file;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -26,26 +26,40 @@ struct DownloadEntry {
 }
 
 #[derive(Deserialize)]
-struct VersionPackageJson {
-    downloads: VersionJsonDownload,
+struct LibraryDownloads {
+    artifact: Option<DownloadEntry>,
 }
 
-/// Đảm bảo file {version}.jar và {version}.json đã được tải về máy trước khi chạy game
+#[derive(Deserialize)]
+struct LibraryItem {
+    downloads: Option<LibraryDownloads>,
+    name: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct VersionPackageJson {
+    downloads: VersionJsonDownload,
+    libraries: Option<Vec<LibraryItem>>,
+}
+
+/// Đảm bảo file {version}.jar, {version}.json và toàn bộ Libraries thực tế đã được tải về
 pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Result<(), String> {
     let base_path = PathBuf::from(game_dir);
     let version_dir = base_path.join("versions").join(game_version);
     let client_jar = version_dir.join(format!("{}.jar", game_version));
     let version_json = version_dir.join(format!("{}.json", game_version));
-
-    if client_jar.exists() && version_json.exists() {
-        return Ok(());
-    }
+    let libraries_dir = base_path.join("libraries");
 
     fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&libraries_dir).map_err(|e| e.to_string())?;
 
-    // Tải Mojang Manifest V2
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // 1. Tải Mojang Manifest V2
     let manifest_url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-    let client = reqwest::Client::new();
     let res = client.get(manifest_url).send().await.map_err(|e| e.to_string())?;
     
     #[derive(Deserialize)]
@@ -60,19 +74,40 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
 
     let manifest_data = res.json::<Manifest>().await.map_err(|e| e.to_string())?;
     if let Some(entry) = manifest_data.versions.into_iter().find(|v| v.id == game_version) {
-        // Tải package json
+        // Tải package json chính thức
         let pkg_res = client.get(&entry.url).send().await.map_err(|e| e.to_string())?;
         let pkg_text = pkg_res.text().await.map_err(|e| e.to_string())?;
         fs::write(&version_json, &pkg_text).map_err(|e| e.to_string())?;
 
-        // Parse package json để lấy URL client.jar
+        // Parse package json
         if let Ok(pkg_json) = serde_json::from_str::<VersionPackageJson>(&pkg_text) {
+            // Tải Client Jar
             let client_url = pkg_json.downloads.client.url;
             let sha1 = pkg_json.downloads.client.sha1;
             verify_and_download_file(&client_url, &client_jar, sha1.as_deref()).await?;
+
+            // Tải 100% danh sách Libraries thực tế
+            if let Some(libs) = pkg_json.libraries {
+                for lib in libs {
+                    if let Some(downloads) = lib.downloads {
+                        if let Some(artifact) = downloads.artifact {
+                            let lib_url = artifact.url;
+                            // Tính toán relative path từ URL
+                            if let Ok(url_parsed) = reqwest::Url::parse(&lib_url) {
+                                let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
+                                if path_segments.len() > 1 {
+                                    let rel_path = path_segments[1..].join("/");
+                                    let target_lib_path = libraries_dir.join(rel_path);
+                                    let _ = verify_and_download_file(&lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     } else {
-        // Fallback tải trực tiếp client jar nếu không tìm thấy trong manifest
+        // Fallback tải trực tiếp client jar
         let fallback_url = format!("https://launcher.mojang.com/v1/objects/1.21.1/client.jar");
         let _ = verify_and_download_file(&fallback_url, &client_jar, None).await;
     }
@@ -100,7 +135,6 @@ pub async fn install_mod_loader(
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
 
-            // Tải Fabric profile JSON
             let profile_url = format!(
                 "https://meta.fabricmc.net/v2/versions/loader/{}/{}/profile/json",
                 game_version, loader_version
@@ -113,7 +147,6 @@ pub async fn install_mod_loader(
                 }
             }
 
-            // Copy client jar từ bản Vanilla sang nếu cần
             let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
             let fabric_jar = target_dir.join(format!("{}.jar", version_id));
             if vanilla_jar.exists() && !fabric_jar.exists() {
