@@ -151,7 +151,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — ADD FOLDER ICON FOR JAVA EXECUTABLE FILE PICKER
+   MAIN COMPONENT — AUTO DOWNLOAD PORTABLE JAVA 21
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -162,6 +162,7 @@ export function App() {
   const [noteIdx, setNoteIdx]                 = useState(0);
   const [isSavingConfig, setIsSavingConfig]   = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
+  const [isDownloadingJre, setIsDownloadingJre] = useState(false);
 
   // Live Fetched Versions State & Real Disk Installed State
   const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
@@ -397,6 +398,22 @@ export function App() {
       }
     } catch (err: any) {
       alert("Lỗi tự động tìm Java: " + err);
+    }
+  };
+
+  // Tải bộ Portable JRE 21 tự động về máy
+  const handleDownloadPortableJre21 = async () => {
+    setIsDownloadingJre(true);
+    try {
+      const javaPath = await invoke<string>("download_portable_java21_cmd", { gameDir: config.game_dir });
+      if (javaPath) {
+        setConfig((prev) => ({ ...prev, java_path: javaPath }));
+        alert("Đã tự động tải và giải nén bộ Portable JRE 21 thành công!");
+      }
+    } catch (err: any) {
+      alert("Lỗi tải Portable JRE 21: " + err);
+    } finally {
+      setIsDownloadingJre(false);
     }
   };
 
@@ -1295,16 +1312,28 @@ export function App() {
                   </div>
                 </div>
 
-                {/* Java Executable Path with Folder Browse Icon & Auto-Detect Button */}
+                {/* Java Executable Path with Auto-Download, Auto-Detect & Folder Picker */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <label className="text-xs font-bold" style={{ color: titleText }}>Java Executable Path (JDK 17/21)</label>
-                    <button
-                      onClick={handleAutoDetectJavaPath}
-                      className="text-[10px] font-bold text-emerald-500 hover:underline flex items-center gap-1"
-                    >
-                      <Zap size={10} /> Auto-Detect
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={isDownloadingJre}
+                        onClick={handleDownloadPortableJre21}
+                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20"
+                        title="Tự động tải Java 21 Portable từ Temurin CDN về .minecraft/runtime/"
+                      >
+                        {isDownloadingJre ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                        <span>{isDownloadingJre ? "Downloading JRE 21..." : "Tải Java 21"}</span>
+                      </button>
+
+                      <button
+                        onClick={handleAutoDetectJavaPath}
+                        className="text-[10px] font-bold text-emerald-500 hover:underline flex items-center gap-1"
+                      >
+                        <Zap size={10} /> Auto-Detect
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -1324,7 +1353,7 @@ export function App() {
                       <Folder size={14} className="text-emerald-500" />
                     </button>
                   </div>
-                  <p className="text-[10px] font-medium" style={{ color: subText }}>Bấm icon thư mục 📁 để chọn file java.exe hoặc nút Auto-Detect để launcher tự dò JDK 21.</p>
+                  <p className="text-[10px] font-medium" style={{ color: subText }}>Bấm nút <strong>Tải Java 21</strong> để launcher tự động tải Portable JRE 21 về máy nếu chưa cài Java 21.</p>
                 </div>
               </div>
 
