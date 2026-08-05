@@ -151,7 +151,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — REAL DISK INSTALLED VERSIONS (NO MOCK/HARDCODE)
+   MAIN COMPONENT — ADD FOLDER ICON FOR JAVA EXECUTABLE FILE PICKER
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -221,7 +221,6 @@ export function App() {
   const fetchRealGameVersions = useCallback(async () => {
     setIsLoadingVersions(true);
     try {
-      // Quét ổ đĩa xem bản nào thực sự đã cài
       const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
 
       const res = await fetch("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
@@ -229,7 +228,6 @@ export function App() {
         const data = await res.json();
         const releaseEntries = (data.versions || []).filter((v: any) => v.type === "release");
 
-        // Vanilla & OptiFine Standalone (KHÔNG MOCK, isInstalled kiểm tra từ realDiskIds)
         const vanillaList: VersionItem[] = releaseEntries.map((v: any) => ({
           id: v.id,
           label: v.id,
@@ -284,7 +282,6 @@ export function App() {
 
         setFetchedVersionsList(fullList);
 
-        // Tự động chọn bản đã cài thực sự đầu tiên
         const firstInstalled = fullList.find((v) => v.isInstalled);
         if (firstInstalled) {
           setSelectedVersion(firstInstalled);
@@ -403,6 +400,18 @@ export function App() {
     }
   };
 
+  // Browse java.exe file via native file picker
+  const handleBrowseJavaFile = async () => {
+    try {
+      const selected = await invoke<string | null>("select_java_file_cmd");
+      if (selected) {
+        setConfig((prev) => ({ ...prev, java_path: selected }));
+      }
+    } catch (err: any) {
+      alert("Lỗi chọn file Java: " + err);
+    }
+  };
+
   const handlePlay = async () => {
     setIsLaunching(true);
     try {
@@ -443,7 +452,6 @@ export function App() {
         });
       }
 
-      // Quét lại đĩa cứng thực tế
       const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
 
       setFetchedVersionsList((prev) =>
@@ -1287,7 +1295,7 @@ export function App() {
                   </div>
                 </div>
 
-                {/* Java Executable Path */}
+                {/* Java Executable Path with Folder Browse Icon & Auto-Detect Button */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold" style={{ color: titleText }}>Java Executable Path (JDK 17/21)</label>
@@ -1298,15 +1306,25 @@ export function App() {
                       <Zap size={10} /> Auto-Detect
                     </button>
                   </div>
-                  <input
-                    type="text"
-                    value={config.java_path}
-                    onChange={(e) => setConfig({ ...config, java_path: e.target.value })}
-                    placeholder="java or C:\Program Files\Java\jdk-21\bin\java.exe"
-                    className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
-                    style={{ background: inputBg, borderColor: border, color: titleText }}
-                  />
-                  <p className="text-[10px] font-medium" style={{ color: subText }}>Khuyên dùng JDK 17 hoặc 21 để chạy Minecraft 1.21.1 mượt mà nhất.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={config.java_path}
+                      onChange={(e) => setConfig({ ...config, java_path: e.target.value })}
+                      placeholder="java or C:\Program Files\Java\jdk-21\bin\java.exe"
+                      className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
+                      style={{ background: inputBg, borderColor: border, color: titleText }}
+                    />
+                    <button
+                      onClick={handleBrowseJavaFile}
+                      className="p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center transition-all hover:scale-105 shadow-sm flex-shrink-0"
+                      style={{ background: btnBg, borderColor: border, color: titleText }}
+                      title="Chọn file java.exe trên máy"
+                    >
+                      <Folder size={14} className="text-emerald-500" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-medium" style={{ color: subText }}>Bấm icon thư mục 📁 để chọn file java.exe hoặc nút Auto-Detect để launcher tự dò JDK 21.</p>
                 </div>
               </div>
 

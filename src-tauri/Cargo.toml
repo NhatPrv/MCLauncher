@@ -25,3 +25,4 @@ directories = "5"
 open = "5"
 uuid = { version = "1", features = ["v4", "v3"] }
 chrono = { version = "0.4", features = ["serde"] }
+rfd = "0.15"

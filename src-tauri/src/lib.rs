@@ -27,6 +27,16 @@ fn auto_detect_java() -> Option<String> {
 }
 
 #[tauri::command]
+fn select_java_file_cmd() -> Option<String> {
+    let file = rfd::FileDialog::new()
+        .add_filter("Java Executable", &["exe"])
+        .set_title("Chọn file java.exe thuộc JDK 21 / JDK 17")
+        .pick_file();
+
+    file.map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn download_portable_java21_cmd(game_dir: String) -> Result<String, String> {
     ensure_portable_java21(&game_dir).await
 }
@@ -83,7 +93,6 @@ async fn install_mod_loader_cmd(
         _ => ModLoaderType::Vanilla,
     };
 
-    // Tải sẵn Portable JRE 21 nếu máy chưa có
     let _ = ensure_portable_java21(&game_dir).await;
 
     install_mod_loader(&game_dir, &game_version, loader_enum, &loader_version).await
@@ -91,7 +100,6 @@ async fn install_mod_loader_cmd(
 
 #[tauri::command]
 async fn launch_minecraft(version_id: String, account: Account, mut config: AppConfig) -> Result<u32, String> {
-    // Nếu java_path đang là "java" mặc định của Java 8, tự động kích hoạt tải JRE 21 Portable
     if config.java_path.trim() == "java" || config.java_path.trim().is_empty() {
         if let Ok(portable_java) = ensure_portable_java21(&config.game_dir).await {
             config.java_path = portable_java;
@@ -110,6 +118,7 @@ pub fn run() {
             get_config,
             update_config,
             auto_detect_java,
+            select_java_file_cmd,
             download_portable_java21_cmd,
             login_offline,
             login_microsoft,
