@@ -38,6 +38,9 @@ import {
   CheckSquare,
   Square,
   Activity,
+  Copy,
+  AlertTriangle,
+  Terminal,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -170,7 +173,7 @@ function formatBytes(bytes: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — EXACT PROGRESS & CLEAN STOP BUTTON
+   MAIN COMPONENT — AUTO HIDE JRE 21 BUTTON & ERROR LOG DIALOG WITH COPY
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -185,6 +188,10 @@ export function App() {
 
   // Real-time Download Progress State
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgressPayload | null>(null);
+
+  // Error Log Modal Dialog State
+  const [errorLogModal, setErrorLogModal]     = useState<string | null>(null);
+  const [copiedLog, setCopiedLog]             = useState(false);
 
   // Live Fetched Versions State & Real Disk Installed State
   const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
@@ -420,7 +427,7 @@ export function App() {
       setConfigSaveSuccess(true);
       setTimeout(() => setConfigSaveSuccess(false), 2500);
     } catch (err: any) {
-      alert("Lỗi lưu cấu hình: " + err);
+      setErrorLogModal(`[CONFIG_SAVE_ERROR]\nLỗi lưu cấu hình ứng dụng: ${err?.message || err}`);
     } finally {
       setIsSavingConfig(false);
     }
@@ -433,7 +440,7 @@ export function App() {
         setConfig((prev) => ({ ...prev, java_path: javaPath }));
       }
     } catch (err: any) {
-      alert("Lỗi tự động tìm Java: " + err);
+      setErrorLogModal(`[JAVA_DETECT_ERROR]\nLỗi tự động phát hiện Java: ${err?.message || err}`);
     }
   };
 
@@ -444,10 +451,9 @@ export function App() {
       const javaPath = await invoke<string>("download_portable_java21_cmd", { gameDir: config.game_dir });
       if (javaPath) {
         setConfig((prev) => ({ ...prev, java_path: javaPath }));
-        alert("Đã tự động tải và giải nén bộ Portable JRE 21 thành công!");
       }
     } catch (err: any) {
-      alert("Lỗi tải Portable JRE 21: " + err);
+      setErrorLogModal(`[JRE21_DOWNLOAD_ERROR]\nLỗi tự động tải bộ Portable JRE 21: ${err?.message || err}`);
     } finally {
       setIsDownloadingJre(false);
     }
@@ -461,7 +467,7 @@ export function App() {
         setConfig((prev) => ({ ...prev, java_path: selected }));
       }
     } catch (err: any) {
-      alert("Lỗi chọn file Java: " + err);
+      setErrorLogModal(`[FILE_PICKER_ERROR]\nLỗi chọn file Java Executable: ${err?.message || err}`);
     }
   };
 
@@ -493,7 +499,10 @@ export function App() {
       }
       await invoke<number>("launch_minecraft", { versionId: vid, account: acc, config });
       setTimeout(() => setIsLaunching(false), 2500);
-    } catch (err: any) { setIsLaunching(false); alert("Khởi chạy thất bại: " + (err?.message || err)); }
+    } catch (err: any) {
+      setIsLaunching(false);
+      setErrorLogModal(`[GAME_LAUNCH_FAILURE]\nError launching Minecraft version ${selectedVersion.label}:\n${err?.message || err}\n\nEnvironment details:\n- Java Path: ${config.java_path}\n- Game Dir: ${config.game_dir}\n- RAM Allocated: ${config.max_ram_mb}MB\n- JVM Args: ${config.jvm_args}`);
+    }
   };
 
   const handleOpenFolder = () => { invoke("plugin:opener|open_path", { path: config.game_dir }).catch(() => alert(`Game dir: ${config.game_dir}`)); };
@@ -525,7 +534,7 @@ export function App() {
       );
       setSelectedVersion({ ...targetVer, isInstalled: true });
     } catch (err: any) {
-      alert("Tải phiên bản thất bại: " + err);
+      setErrorLogModal(`[VERSION_INSTALL_ERROR]\nLỗi tải phiên bản ${targetVer.label}: ${err?.message || err}`);
     } finally {
       setInstallingVersionId(null);
     }
@@ -554,7 +563,7 @@ export function App() {
       setAccount(newAcc);
       setOfflineInput("");
     } catch (err: any) {
-      alert("Lỗi tạo tài khoản Offline: " + err);
+      setErrorLogModal(`[OFFLINE_LOGIN_ERROR]\nLỗi tạo tài khoản Offline: ${err?.message || err}`);
     }
   };
 
@@ -568,7 +577,7 @@ export function App() {
       setIsLoggingInMs(false);
     } catch (err: any) {
       setIsLoggingInMs(false);
-      alert("Xác thực Microsoft đang được xử lý hoặc thất bại: " + (err?.message || err));
+      setErrorLogModal(`[MICROSOFT_OAUTH_ERROR]\nXác thực Microsoft OAuth2 thất bại:\n${err?.message || err}`);
     }
   };
 
@@ -598,6 +607,15 @@ export function App() {
     }
   };
 
+  // Copy Error Log to Clipboard for AI Diagnostics
+  const handleCopyErrorLog = () => {
+    if (errorLogModal) {
+      navigator.clipboard.writeText(errorLogModal);
+      setCopiedLog(true);
+      setTimeout(() => setCopiedLog(false), 2000);
+    }
+  };
+
   // Filter versions by loader and search query
   const filteredVersionsTab = fetchedVersionsList.filter((v) => {
     const matchesLoader = v.loader === versionTabLoader;
@@ -615,6 +633,13 @@ export function App() {
 
   // Tính phần trăm chính xác khớp 100% giữa thanh tiến trình và thông số %
   const currentPercentage = downloadProgress ? Math.min(100, Math.max(0, downloadProgress.percentage)) : 0;
+
+  // Kiểm tra Java 21 đã có/đã cài chưa để tự động ẩn nút "Tải Java 21"
+  const isJava21AlreadyInstalled =
+    config.java_path.toLowerCase().includes("java-runtime-21") ||
+    config.java_path.toLowerCase().includes("jdk-21") ||
+    config.java_path.toLowerCase().includes("jre-21") ||
+    config.java_path.toLowerCase().includes("gamma");
 
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
@@ -1366,20 +1391,26 @@ export function App() {
                   </div>
                 </div>
 
-                {/* Java Executable Path with Auto-Download, Auto-Detect & Folder Picker */}
+                {/* Java Executable Path — AUTO HIDE DOWNLOAD BUTTON IF JAVA 21 IS ALREADY INSTALLED */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <label className="text-xs font-bold" style={{ color: titleText }}>Java Executable Path (JDK 17/21)</label>
                     <div className="flex items-center gap-2">
-                      <button
-                        disabled={isDownloadingJre}
-                        onClick={handleDownloadPortableJre21}
-                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20"
-                        title="Tự động tải Java 21 Portable từ Temurin CDN về .minecraft/runtime/"
-                      >
-                        {isDownloadingJre ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                        <span>{isDownloadingJre ? "Downloading JRE 21..." : "Tải Java 21"}</span>
-                      </button>
+                      {isJava21AlreadyInstalled ? (
+                        <span className="text-[10px] font-extrabold text-emerald-500 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 shadow-sm">
+                          <CheckCircle size={10} /> JRE 21 Installed
+                        </span>
+                      ) : (
+                        <button
+                          disabled={isDownloadingJre}
+                          onClick={handleDownloadPortableJre21}
+                          className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20"
+                          title="Tự động tải Java 21 Portable từ Temurin CDN về .minecraft/runtime/"
+                        >
+                          {isDownloadingJre ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                          <span>{isDownloadingJre ? "Downloading JRE 21..." : "Tải Java 21"}</span>
+                        </button>
+                      )}
 
                       <button
                         onClick={handleAutoDetectJavaPath}
@@ -1407,7 +1438,11 @@ export function App() {
                       <Folder size={14} className="text-emerald-500" />
                     </button>
                   </div>
-                  <p className="text-[10px] font-medium" style={{ color: subText }}>Bấm nút <strong>Tải Java 21</strong> để launcher tự động tải Portable JRE 21 về máy nếu chưa cài Java 21.</p>
+                  <p className="text-[10px] font-medium" style={{ color: subText }}>
+                    {isJava21AlreadyInstalled
+                      ? "Máy bạn đã sẵn sàng với Java 21 thích hợp cho Minecraft 1.21.1."
+                      : "Bấm nút Tải Java 21 để launcher tự động tải Portable JRE 21 về máy nếu chưa cài Java 21."}
+                  </p>
                 </div>
               </div>
 
@@ -1513,7 +1548,7 @@ export function App() {
               </div>
             </div>
 
-            {/* Glowing Smooth Progress Bar - CHÍNH XÁC NẠP THEO HẰNG SỐ CURRENT PERCENTAGE */}
+            {/* Glowing Smooth Progress Bar */}
             <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: dark ? "#1e293b" : "#e2e8f0" }}>
               <div
                 className="h-full rounded-full transition-all duration-300"
@@ -1689,7 +1724,7 @@ export function App() {
               <Folder size={14} />
             </button>
 
-            {/* PLAY / STOP Button — CLEAN MINIMALIST STOP BUTTON WITH ICON ONLY */}
+            {/* PLAY / STOP Button */}
             {isBusyDownloadingOrLaunching ? (
               <button
                 onClick={handleStopLaunchOrDownload}
@@ -1721,6 +1756,54 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* ═══ ERROR LOG DIALOG MODAL WITH COPY BUTTON FOR AI DIAGNOSTICS ═══ */}
+      {errorLogModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl rounded-2xl border border-red-500/40 p-6 space-y-4 shadow-2xl overflow-hidden relative" style={{ background: dark ? "#090d16" : "#ffffff" }}>
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: border }}>
+              <div className="flex items-center gap-2 text-red-500">
+                <AlertTriangle size={20} className="animate-bounce" />
+                <h3 className="font-extrabold text-base tracking-tight" style={{ color: titleText }}>Khởi Chạy Không Thành Công</h3>
+              </div>
+              <button onClick={() => setErrorLogModal(null)} className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs font-medium" style={{ color: subText }}>
+              Đã xảy ra sự cố trong quá trình khởi chạy game hoặc môi trường. Bạn có thể bấm nút <strong>Copy Log</strong> bên dưới để dán vào các AI (ChatGPT / Gemini) nhờ tư vấn giải pháp tra lỗi nhanh nhất!
+            </p>
+
+            {/* Code Log Frame */}
+            <div className="relative rounded-xl border bg-slate-950 p-4 font-mono text-xs overflow-x-auto max-h-64 text-red-300 border-red-900/40 shadow-inner" style={{ scrollbarWidth: "thin" }}>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-2 border-b border-slate-800 pb-1 uppercase tracking-widest">
+                <Terminal size={12} /> Traceback Execution Log
+              </div>
+              <pre className="whitespace-pre-wrap break-all">{errorLogModal}</pre>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={handleCopyErrorLog}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all hover:scale-105"
+              >
+                {copiedLog ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copiedLog ? "Đã Copy Chi Tiết Lỗi!" : "Copy Log Tra Lỗi AI"}</span>
+              </button>
+
+              <button
+                onClick={() => setErrorLogModal(null)}
+                className="px-4 py-2 rounded-xl border font-bold text-xs transition-colors"
+                style={{ background: btnBg, borderColor: border, color: titleText }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
