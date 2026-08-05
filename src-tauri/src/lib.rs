@@ -8,7 +8,7 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader, get_installed_versions};
+use installer::{ModLoaderType, install_mod_loader, get_installed_versions, ensure_portable_java21};
 use launcher::launch_game;
 
 #[tauri::command]
@@ -24,6 +24,11 @@ fn update_config(config: AppConfig) -> Result<(), String> {
 #[tauri::command]
 fn auto_detect_java() -> Option<String> {
     detect_java_path()
+}
+
+#[tauri::command]
+async fn download_portable_java21_cmd(game_dir: String) -> Result<String, String> {
+    ensure_portable_java21(&game_dir).await
 }
 
 #[tauri::command]
@@ -77,11 +82,23 @@ async fn install_mod_loader_cmd(
         "iris" => ModLoaderType::Iris,
         _ => ModLoaderType::Vanilla,
     };
+
+    // Tải sẵn Portable JRE 21 nếu máy chưa có
+    let _ = ensure_portable_java21(&game_dir).await;
+
     install_mod_loader(&game_dir, &game_version, loader_enum, &loader_version).await
 }
 
 #[tauri::command]
-fn launch_minecraft(version_id: String, account: Account, config: AppConfig) -> Result<u32, String> {
+async fn launch_minecraft(version_id: String, account: Account, mut config: AppConfig) -> Result<u32, String> {
+    // Nếu java_path đang là "java" mặc định của Java 8, tự động kích hoạt tải JRE 21 Portable
+    if config.java_path.trim() == "java" || config.java_path.trim().is_empty() {
+        if let Ok(portable_java) = ensure_portable_java21(&config.game_dir).await {
+            config.java_path = portable_java;
+            save_config(&config).ok();
+        }
+    }
+
     launch_game(&version_id, &account, &config)
 }
 
@@ -93,6 +110,7 @@ pub fn run() {
             get_config,
             update_config,
             auto_detect_java,
+            download_portable_java21_cmd,
             login_offline,
             login_microsoft,
             get_vanilla_versions,
