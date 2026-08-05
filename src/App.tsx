@@ -261,10 +261,10 @@ export function App() {
     }
   }, []);
 
-  /* Helper kiểm tra linh hoạt xem ID phiên bản có khớp với bất kỳ thư mục nào trên đĩa cứng không */
+  /* Helper kiểm tra chính xác tuyệt đối xem ID phiên bản có tồn tại trên đĩa cứng không */
   const isVersionInstalledOnDisk = (targetId: string, realDiskIds: string[]) => {
     return realDiskIds.some(
-      (diskId) => diskId === targetId || diskId.startsWith(targetId) || targetId.startsWith(diskId)
+      (diskId) => diskId === targetId || diskId === `${targetId}-latest`
     );
   };
 
@@ -335,7 +335,7 @@ export function App() {
         const customDiskVersions: VersionItem[] = [];
         for (const diskId of realDiskIds) {
           const isMatched = predefinedList.some(
-            (v) => v.id === diskId || diskId.startsWith(v.id) || v.id.startsWith(diskId)
+            (v) => v.id === diskId || `${v.id}-latest` === diskId
           );
           if (!isMatched) {
             let loader: LoaderType = "vanilla";
@@ -674,10 +674,33 @@ export function App() {
     return matchesLoader && matchesSearch;
   });
 
-  // Dropdown list CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ TRÊN ĐĨA CỨNG
-  const installedVersionsForDropdown = fetchedVersionsList.filter(
-    (v) => v.isInstalled || isVersionInstalledOnDisk(v.id, installedDiskVersionIds)
-  );
+  // Dropdown list CHỈ HIỂN THỊ 100% CÁC THƯ MỤC PHIÊN BẢN ĐÃ TẢI THỰC SỰ TRÊN ĐĨA CỨNG (KHÔNG LẤY TỪ DB/MANIFEST)
+  const installedVersionsForDropdown = installedDiskVersionIds.map((diskFolder) => {
+    const matched = fetchedVersionsList.find(
+      (v) => v.id === diskFolder || `${v.id}-latest` === diskFolder
+    );
+    if (matched) {
+      return { ...matched, isInstalled: true };
+    }
+
+    let loader: LoaderType = "vanilla";
+    const lower = diskFolder.toLowerCase();
+    if (lower.includes("fabric")) loader = "fabric";
+    else if (lower.includes("neoforge")) loader = "neoforge";
+    else if (lower.includes("forge")) loader = "forge";
+    else if (lower.includes("quilt")) loader = "quilt";
+    else if (lower.includes("iris")) loader = "iris";
+
+    const verStr = diskFolder.split("-")[0] || diskFolder;
+    return {
+      id: diskFolder,
+      label: diskFolder,
+      sub: "Phiên bản trên đĩa thực tế",
+      loader: loader,
+      versionStr: verStr,
+      isInstalled: true,
+    };
+  });
 
   const isBusyDownloadingOrLaunching = isLaunching || isDownloadingJre || installingVersionId !== null;
 
