@@ -1741,19 +1741,16 @@ export function App() {
             ) : (
               <button
                 onClick={handlePlay}
-                className="flex items-center gap-3 px-7 rounded-xl font-bold transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white"
+                className="flex items-center gap-2 px-6 rounded-xl font-extrabold text-xs transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white"
                 style={{
                   height: 46,
                   background: "linear-gradient(135deg,#10b981 0%,#059669 50%,#047857 100%)",
-                  boxShadow: "0 0 28px rgba(16,185,129,0.5), 0 4px 14px rgba(0,0,0,0.3)",
+                  boxShadow: "0 0 24px rgba(16,185,129,0.5), 0 4px 12px rgba(0,0,0,0.3)",
                   border: "1px solid rgba(255,255,255,0.2)",
                 }}
               >
-                <Play size={18} fill="currentColor" />
-                <div className="text-left">
-                  <div className="text-base font-extrabold tracking-wider leading-none">PLAY</div>
-                  <div className="text-[8px] tracking-[0.15em] opacity-80 uppercase leading-none mt-0.5 font-medium">ENTER THE GAME</div>
-                </div>
+                <Play size={16} fill="currentColor" />
+                <span className="tracking-wider text-sm font-black">PLAY</span>
               </button>
             )}
           </div>
