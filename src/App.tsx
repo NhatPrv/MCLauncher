@@ -261,6 +261,13 @@ export function App() {
     }
   }, []);
 
+  /* Helper kiểm tra linh hoạt xem ID phiên bản có khớp với bất kỳ thư mục nào trên đĩa cứng không */
+  const isVersionInstalledOnDisk = (targetId: string, realDiskIds: string[]) => {
+    return realDiskIds.some(
+      (diskId) => diskId === targetId || diskId.startsWith(targetId) || targetId.startsWith(diskId)
+    );
+  };
+
   /* ── 2. Fetch Real Game Versions ── */
   const fetchRealGameVersions = useCallback(async () => {
     setIsLoadingVersions(true);
@@ -278,43 +285,43 @@ export function App() {
           sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
           loader: "vanilla" as LoaderType,
           versionStr: v.id,
-          isInstalled: realDiskIds.includes(v.id),
+          isInstalled: isVersionInstalledOnDisk(v.id, realDiskIds),
           releaseDate: v.releaseTime,
         }));
 
         const optifineStandalone: VersionItem[] = [
-          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-optifine-hd") },
-          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-optifine-hd") },
+          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-optifine-hd", realDiskIds) },
+          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-optifine-hd", realDiskIds) },
         ];
 
         const fabricVariants: VersionItem[] = [
-          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-fabric") },
-          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-fabric") },
-          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-fabric") },
+          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-fabric", realDiskIds) },
+          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-fabric", realDiskIds) },
+          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-fabric", realDiskIds) },
         ];
 
         const forgeVariants: VersionItem[] = [
-          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: realDiskIds.includes("1.20.4-forge") },
-          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-forge-opti") },
-          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: realDiskIds.includes("1.16.5-forge") },
+          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: isVersionInstalledOnDisk("1.20.4-forge", realDiskIds) },
+          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-forge-opti", realDiskIds) },
+          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: isVersionInstalledOnDisk("1.16.5-forge", realDiskIds) },
         ];
 
         const neoforgeVariants: VersionItem[] = [
-          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-neoforge") },
-          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: realDiskIds.includes("1.20.4-neoforge") },
+          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-neoforge", realDiskIds) },
+          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: isVersionInstalledOnDisk("1.20.4-neoforge", realDiskIds) },
         ];
 
         const quiltVariants: VersionItem[] = [
-          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-quilt") },
-          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-quilt") },
+          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-quilt", realDiskIds) },
+          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-quilt", realDiskIds) },
         ];
 
         const irisVariants: VersionItem[] = [
-          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-iris") },
-          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-iris") },
+          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-iris", realDiskIds) },
+          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-iris", realDiskIds) },
         ];
 
-        const fullList = [
+        const predefinedList = [
           ...neoforgeVariants,
           ...fabricVariants,
           ...forgeVariants,
@@ -324,6 +331,34 @@ export function App() {
           ...vanillaList,
         ];
 
+        // Tự động quét và bổ sung 100% các phiên bản đĩa thực tế nếu chưa có trong danh sách tĩnh
+        const customDiskVersions: VersionItem[] = [];
+        for (const diskId of realDiskIds) {
+          const isMatched = predefinedList.some(
+            (v) => v.id === diskId || diskId.startsWith(v.id) || v.id.startsWith(diskId)
+          );
+          if (!isMatched) {
+            let loader: LoaderType = "vanilla";
+            const lower = diskId.toLowerCase();
+            if (lower.includes("fabric")) loader = "fabric";
+            else if (lower.includes("neoforge")) loader = "neoforge";
+            else if (lower.includes("forge")) loader = "forge";
+            else if (lower.includes("quilt")) loader = "quilt";
+            else if (lower.includes("iris")) loader = "iris";
+
+            const verStr = diskId.split("-")[0] || diskId;
+            customDiskVersions.push({
+              id: diskId,
+              label: diskId,
+              sub: "Phiên bản trên đĩa thực tế",
+              loader: loader,
+              versionStr: verStr,
+              isInstalled: true,
+            });
+          }
+        }
+
+        const fullList = [...customDiskVersions, ...predefinedList];
         setFetchedVersionsList(fullList);
 
         const firstInstalled = fullList.find((v) => v.isInstalled);
@@ -626,7 +661,7 @@ export function App() {
 
   // Dropdown list CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ TRÊN ĐĨA CỨNG
   const installedVersionsForDropdown = fetchedVersionsList.filter(
-    (v) => v.isInstalled || installedDiskVersionIds.includes(v.id)
+    (v) => v.isInstalled || isVersionInstalledOnDisk(v.id, installedDiskVersionIds)
   );
 
   const isBusyDownloadingOrLaunching = isLaunching || isDownloadingJre || installingVersionId !== null;

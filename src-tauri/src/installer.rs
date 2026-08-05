@@ -212,11 +212,7 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
             for entry in entries.flatten() {
                 if entry.path().is_dir() {
                     let folder_name = entry.file_name().to_string_lossy().to_string();
-                    let jar_path = entry.path().join(format!("{}.jar", folder_name));
-                    let json_path = entry.path().join(format!("{}.json", folder_name));
-                    if jar_path.exists() || json_path.exists() {
-                        installed.push(folder_name);
-                    }
+                    installed.push(folder_name);
                 }
             }
         }
