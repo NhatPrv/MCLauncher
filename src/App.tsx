@@ -173,7 +173,7 @@ function formatBytes(bytes: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — AUTO HIDE JRE 21 BUTTON & ERROR LOG DIALOG WITH COPY
+   MAIN COMPONENT — RESPONSIVE ICON-ONLY TOP NAVBAR ON SMALL SCREENS
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -663,14 +663,14 @@ export function App() {
       )}
       <div className="absolute inset-0 pointer-events-none" style={{ background: dark ? "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16,185,129,0.08) 0%, transparent 60%)" : "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16,185,129,0.04) 0%, transparent 60%)" }} />
 
-      {/* ═══ TOP NAVBAR ═══ */}
-      <nav className="relative z-20 flex items-center justify-between px-6 flex-shrink-0 h-14 border-b backdrop-blur-md transition-colors" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.88)" : "rgba(255,255,255,0.88)" }}>
+      {/* ═══ TOP NAVBAR (RESPONSIVE ICON-ONLY MODE WHEN SMALL SCREEN) ═══ */}
+      <nav className="relative z-20 flex items-center justify-between px-4 md:px-6 flex-shrink-0 h-14 border-b backdrop-blur-md transition-colors gap-2" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.88)" : "rgba(255,255,255,0.88)" }}>
         {/* Logo Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 0 12px rgba(16,185,129,0.5)" }}>
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 0 12px rgba(16,185,129,0.5)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="rgba(255,255,255,0.9)" /><path d="M12 2L3 7l9 5 9-5L12 2z" fill="rgba(255,255,255,0.4)" /></svg>
           </div>
-          <div>
+          <div className="hidden sm:block">
             <div className="flex items-center gap-1.5">
               <span className="font-bold text-sm tracking-tight" style={{ color: titleText }}>MCLauncher</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] font-bold text-white" style={{ background: "linear-gradient(135deg,#10b981,#059669)", boxShadow: "0 0 6px rgba(16,185,129,0.4)" }}>
@@ -681,8 +681,8 @@ export function App() {
           </div>
         </div>
 
-        {/* Center Tabs — Home & News, Versions, Modpacks, Account, Settings */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Center Tabs — Automatically Switches to Icon-Only on Small / Compact Screens */}
+        <div className="flex items-center gap-1 md:gap-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
           {([
             { id: "home", label: "Home & News", icon: Newspaper },
             { id: "versions", label: "Versions", icon: ListFilter },
@@ -694,21 +694,24 @@ export function App() {
               key={id}
               onClick={() => setActiveTab(id)}
               title={label}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-200 flex-shrink-0 ${
+                activeTab === id ? "shadow-sm" : ""
+              }`}
               style={{
                 background: activeTab === id ? "rgba(16,185,129,0.15)" : "transparent",
                 color: activeTab === id ? "#10b981" : subText,
                 border: activeTab === id ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
               }}
             >
-              <Icon size={14} className="flex-shrink-0" />
-              <span className="hidden sm:inline whitespace-nowrap">{label}</span>
+              <Icon size={15} className="flex-shrink-0" />
+              {/* Tên nút tự động ẩn đi (Chỉ hiện Icon) khi chiều rộng cửa sổ bị thu nhỏ */}
+              <span className="hidden min-[1120px]:inline whitespace-nowrap">{label}</span>
             </button>
           ))}
         </div>
 
         {/* Right Theme Switcher */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
             {dark ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
             <div className="relative w-7 h-3.5 rounded-full" style={{ background: dark ? "#10b981" : "#94a3b8" }}>
@@ -1730,7 +1733,7 @@ export function App() {
                 onClick={handleStopLaunchOrDownload}
                 className="flex items-center gap-2 px-6 rounded-xl font-extrabold text-xs transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white bg-red-600 hover:bg-red-500 shadow-md border border-white/20"
                 style={{ height: 46 }}
-                title="Bấm để DỪNG / HỦY TIẾN TRÌNH"
+                title="Bấm để DỪNG / HỦY TIẾN TR TRÌNH"
               >
                 <Square size={14} fill="currentColor" />
                 <span className="tracking-wider text-sm font-black">STOP</span>
