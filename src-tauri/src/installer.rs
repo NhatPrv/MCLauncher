@@ -220,6 +220,26 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
     installed
 }
 
+pub fn delete_installed_version(game_dir: &str, version_id: &str) -> Result<(), String> {
+    let versions_dir = PathBuf::from(game_dir).join("versions");
+    if versions_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&versions_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    if folder_name == version_id
+                        || folder_name.starts_with(version_id)
+                        || version_id.starts_with(&folder_name)
+                    {
+                        let _ = fs::remove_dir_all(entry.path());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Result<(), String> {
     let base_path = PathBuf::from(game_dir);
     let vanilla_ver = game_version.split('-').next().unwrap_or(game_version);

@@ -575,16 +575,31 @@ export function App() {
     }
   };
 
-  // Uninstall / Remove Version Handler
+  // Uninstall / Remove Version Handler (XÓA THỰC SỰ THƯ MỤC TRÊN ĐĨA CỨNG)
   const handleUninstallVersion = async (targetVer: VersionItem) => {
-    if (confirm(`Bạn có chắc chắn muốn gỡ phiên bản ${targetVer.label} khỏi máy không?`)) {
-      setFetchedVersionsList((prev) =>
-        prev.map((v) => (v.id === targetVer.id ? { ...v, isInstalled: false } : v))
-      );
-      if (selectedVersion.id === targetVer.id) {
-        setSelectedVersion({ ...targetVer, isInstalled: false });
+    if (confirm(`Bạn có chắc chắn muốn gỡ và XÓA HOÀN TOÀN phiên bản ${targetVer.label} khỏi đĩa cứng không?`)) {
+      try {
+        await invoke("delete_installed_version_cmd", {
+          gameDir: config.game_dir,
+          versionId: targetVer.id,
+        });
+
+        const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
+
+        setFetchedVersionsList((prev) =>
+          prev
+            .filter((v) => !v.sub.includes("đĩa thực tế") || isVersionInstalledOnDisk(v.id, realDiskIds))
+            .map((v) =>
+              isVersionInstalledOnDisk(v.id, realDiskIds) ? v : { ...v, isInstalled: false }
+            )
+        );
+
+        if (selectedVersion.id === targetVer.id) {
+          setSelectedVersion({ ...targetVer, isInstalled: false });
+        }
+      } catch (err: any) {
+        setErrorLogModal(`[VERSION_DELETE_ERROR]\nLỗi xóa thư mục phiên bản ${targetVer.label}: ${err?.message || err}`);
       }
-      await refreshInstalledVersionsFromDisk(config.game_dir);
     }
   };
 

@@ -8,7 +8,7 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader, get_installed_versions, ensure_portable_java21, ensure_portable_java21_with_app, ensure_vanilla_version};
+use installer::{ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version, ensure_portable_java21, ensure_portable_java21_with_app, ensure_vanilla_version};
 use launcher::launch_game;
 
 #[tauri::command]
@@ -28,19 +28,16 @@ async fn auto_detect_java() -> Option<String> {
             return Some(path);
         }
     }
-
-    let default_game_dir = config::get_default_game_dir();
-    ensure_portable_java21(&default_game_dir).await.ok()
+    None
 }
 
 #[tauri::command]
-fn select_java_file_cmd() -> Option<String> {
-    let file = rfd::FileDialog::new()
-        .add_filter("Java Executable", &["exe"])
-        .set_title("Chọn file java.exe thuộc JDK 21 / JDK 17")
-        .pick_file();
-
-    file.map(|p| p.to_string_lossy().to_string())
+async fn select_java_file_cmd() -> Option<String> {
+    rfd::AsyncFileDialog::new()
+        .add_filter("Executable", &["exe"])
+        .pick_file()
+        .await
+        .map(|f| f.path().to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -49,7 +46,7 @@ async fn download_portable_java21_cmd(app_handle: tauri::AppHandle, game_dir: St
 }
 
 #[tauri::command]
-fn login_offline(username: String) -> Account {
+async fn login_offline(username: String) -> Account {
     create_offline_account(&username)
 }
 
@@ -81,6 +78,11 @@ async fn get_quilt_versions(game_version: String) -> Result<Vec<String>, String>
 #[tauri::command]
 fn get_installed_versions_cmd(game_dir: String) -> Vec<String> {
     get_installed_versions(&game_dir)
+}
+
+#[tauri::command]
+fn delete_installed_version_cmd(game_dir: String, version_id: String) -> Result<(), String> {
+    delete_installed_version(&game_dir, &version_id)
 }
 
 #[tauri::command]
@@ -139,6 +141,7 @@ pub fn run() {
             get_forge_versions,
             get_quilt_versions,
             get_installed_versions_cmd,
+            delete_installed_version_cmd,
             install_mod_loader_cmd,
             launch_minecraft
         ])
