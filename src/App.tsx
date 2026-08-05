@@ -31,6 +31,11 @@ import {
   Palette,
   Sparkles,
   ListFilter,
+  Save,
+  Cpu,
+  Monitor,
+  HardDrive,
+  CheckSquare,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -60,7 +65,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 }
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
-type Tab = "home" | "versions" | "mods" | "account";
+type Tab = "home" | "versions" | "mods" | "account" | "settings";
 type LoaderType = "vanilla" | "fabric" | "forge" | "neoforge" | "quilt" | "iris";
 type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
 
@@ -146,7 +151,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — SINGLE COLUMN ROW-BY-ROW GAME VERSIONS LIST
+   MAIN COMPONENT — SETTINGS PAGE AS FULL NAVBAR TAB
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -154,8 +159,9 @@ export function App() {
   const [versionOpen, setVersionOpen]         = useState(false);
   const [accountDropOpen, setAccountDropOpen] = useState(false);
   const [isLaunching, setIsLaunching]       = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [noteIdx, setNoteIdx]                 = useState(0);
+  const [isSavingConfig, setIsSavingConfig]   = useState(false);
+  const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
 
   // Live Fetched Versions State
   const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
@@ -358,6 +364,30 @@ export function App() {
     invoke("update_config", { config: c }).catch(() => {});
   };
 
+  const handleSaveConfig = async () => {
+    setIsSavingConfig(true);
+    try {
+      await invoke("update_config", { config });
+      setConfigSaveSuccess(true);
+      setTimeout(() => setConfigSaveSuccess(false), 2500);
+    } catch (err: any) {
+      alert("Lỗi lưu cấu hình: " + err);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  const handleAutoDetectJavaPath = async () => {
+    try {
+      const javaPath = await invoke<string>("auto_detect_java");
+      if (javaPath) {
+        setConfig((prev) => ({ ...prev, java_path: javaPath }));
+      }
+    } catch (err: any) {
+      alert("Lỗi tự động tìm Java: " + err);
+    }
+  };
+
   const handlePlay = async () => {
     setIsLaunching(true);
     try {
@@ -516,13 +546,14 @@ export function App() {
           </div>
         </div>
 
-        {/* Center Tabs — Home & News, Versions, Modpacks, Account */}
+        {/* Center Tabs — Home & News, Versions, Modpacks, Account, Settings */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {([
             { id: "home", label: "Home & News", icon: Newspaper },
             { id: "versions", label: "Versions", icon: ListFilter },
             { id: "mods", label: "Modpacks", icon: Layers },
             { id: "account", label: "Account", icon: User },
+            { id: "settings", label: "Settings", icon: Settings },
           ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -541,11 +572,8 @@ export function App() {
           ))}
         </div>
 
-        {/* Right Settings & Theme Switcher */}
+        {/* Right Theme Switcher */}
         <div className="flex items-center gap-2">
-          <button onClick={() => setIsSettingsOpen(true)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
-            <Settings size={14} />
-          </button>
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
             {dark ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
             <div className="relative w-7 h-3.5 rounded-full" style={{ background: dark ? "#10b981" : "#94a3b8" }}>
@@ -690,7 +718,7 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: GAME VERSIONS MANAGEMENT (SINGLE COLUMN ROW LIST) ─── */}
+        {/* ─── TAB: GAME VERSIONS MANAGEMENT ─── */}
         {activeTab === "versions" && (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -792,17 +820,15 @@ export function App() {
                         </div>
                       </div>
 
-                      {/* Right Action Buttons: Play, Download (Checkmark if installed), Uninstall */}
+                      {/* Right Action Buttons */}
                       <div className="flex items-center gap-2.5 self-end md:self-auto" onClick={(e) => e.stopPropagation()}>
                         {v.isInstalled ? (
                           <>
-                            {/* Icon Nút Download Có Chữ V (Checkmark) đại diện cho đã tải */}
                             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 font-extrabold text-xs">
                               <CheckCircle size={15} />
                               <span>Đã tải (V)</span>
                             </div>
 
-                            {/* Nút Play */}
                             <button
                               onClick={() => {
                                 setSelectedVersion(v);
@@ -813,7 +839,6 @@ export function App() {
                               <Play size={13} fill="currentColor" /> Play
                             </button>
 
-                            {/* Nút Gỡ phiên bản */}
                             <button
                               onClick={() => handleUninstallVersion(v)}
                               className="px-3 py-2 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 font-bold text-xs flex items-center gap-1 transition-all hover:scale-105"
@@ -1169,6 +1194,165 @@ export function App() {
             </div>
           </div>
         )}
+
+        {/* ─── TAB: FULL SETTINGS PAGE (NO POPUP MODAL) ─── */}
+        {activeTab === "settings" && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight flex items-center gap-2.5" style={{ color: titleText }}>
+                  <Settings size={24} className="text-emerald-500" />
+                  <span>Launcher Settings</span>
+                </h2>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Cấu hình tham số RAM, Java Runtime, độ phân giải cửa sổ và môi trường Minecraft.</p>
+              </div>
+
+              {/* Save Button */}
+              <button
+                disabled={isSavingConfig}
+                onClick={handleSaveConfig}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+              >
+                {isSavingConfig ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : configSaveSuccess ? (
+                  <CheckSquare size={14} className="text-white" />
+                ) : (
+                  <Save size={14} />
+                )}
+                <span>{isSavingConfig ? "Saving..." : configSaveSuccess ? "Saved!" : "Save Changes"}</span>
+              </button>
+            </div>
+
+            {/* Settings Sections Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* Section 1: Java & Memory (RAM) */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
+                  <Cpu size={16} className="text-emerald-500" />
+                  <span>Memory & Java Settings</span>
+                </h3>
+
+                {/* RAM Range Slider */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span style={{ color: titleText }}>Max Allocated RAM</span>
+                    <span className="font-mono text-emerald-500 font-extrabold">{config.max_ram_mb} MB ({ (config.max_ram_mb / 1024).toFixed(1) } GB)</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1024"
+                    max="16384"
+                    step="512"
+                    value={config.max_ram_mb}
+                    onChange={(e) => setConfig({ ...config, max_ram_mb: Number(e.target.value) })}
+                    className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-700 rounded-lg"
+                  />
+                  <div className="flex justify-between text-[10px] font-medium" style={{ color: subText }}>
+                    <span>1 GB (Min)</span>
+                    <span>8 GB (Rec)</span>
+                    <span>16 GB (Max)</span>
+                  </div>
+                </div>
+
+                {/* Java Executable Path */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold" style={{ color: titleText }}>Java Executable Path (JDK 17/21)</label>
+                    <button
+                      onClick={handleAutoDetectJavaPath}
+                      className="text-[10px] font-bold text-emerald-500 hover:underline flex items-center gap-1"
+                    >
+                      <Zap size={10} /> Auto-Detect
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={config.java_path}
+                    onChange={(e) => setConfig({ ...config, java_path: e.target.value })}
+                    placeholder="java or C:\Program Files\Java\jdk-21\bin\java.exe"
+                    className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
+                    style={{ background: inputBg, borderColor: border, color: titleText }}
+                  />
+                  <p className="text-[10px] font-medium" style={{ color: subText }}>Khuyên dùng JDK 17 hoặc 21 để chạy Minecraft 1.21.1 mượt mà nhất.</p>
+                </div>
+              </div>
+
+              {/* Section 2: Display & Game Directory */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
+                  <Monitor size={16} className="text-emerald-500" />
+                  <span>Display & Game Directory</span>
+                </h3>
+
+                {/* Resolution Width x Height */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold block mb-1" style={{ color: titleText }}>Resolution Width</label>
+                    <input
+                      type="number"
+                      value={config.resolution_width}
+                      onChange={(e) => setConfig({ ...config, resolution_width: Number(e.target.value) })}
+                      className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
+                      style={{ background: inputBg, borderColor: border, color: titleText }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold block mb-1" style={{ color: titleText }}>Resolution Height</label>
+                    <input
+                      type="number"
+                      value={config.resolution_height}
+                      onChange={(e) => setConfig({ ...config, resolution_height: Number(e.target.value) })}
+                      className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
+                      style={{ background: inputBg, borderColor: border, color: titleText }}
+                    />
+                  </div>
+                </div>
+
+                {/* Game Directory */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold" style={{ color: titleText }}>Game Directory (.minecraft)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={config.game_dir}
+                      onChange={(e) => setConfig({ ...config, game_dir: e.target.value })}
+                      className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
+                      style={{ background: inputBg, borderColor: border, color: titleText }}
+                    />
+                    <button
+                      onClick={handleOpenFolder}
+                      className="p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center transition-all hover:scale-105 shadow-sm"
+                      style={{ background: btnBg, borderColor: border, color: titleText }}
+                      title="Mở thư mục game"
+                    >
+                      <Folder size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: JVM Arguments (Full Width) */}
+              <div className="md:col-span-2 p-5 rounded-2xl border space-y-3 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
+                  <HardDrive size={16} className="text-emerald-500" />
+                  <span>Custom JVM Arguments</span>
+                </h3>
+                <input
+                  type="text"
+                  value={config.jvm_args}
+                  onChange={(e) => setConfig({ ...config, jvm_args: e.target.value })}
+                  placeholder="-XX:+UseG1GC -Dsun.rbac.debug=false"
+                  className="w-full p-3 rounded-xl text-xs font-mono outline-none border font-bold"
+                  style={{ background: inputBg, borderColor: border, color: titleText }}
+                />
+                <p className="text-[10px] font-medium" style={{ color: subText }}>Các cờ tối ưu hóa tiến trình Java Garbage Collection (GC) nâng cao tốc độ FPS trong game.</p>
+              </div>
+
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ═══ BOTTOM ACTION BAR ═══ */}
@@ -1316,7 +1500,7 @@ export function App() {
           <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
             <Folder size={14} />
           </button>
-          <button onClick={() => setIsSettingsOpen(true)} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Settings">
+          <button onClick={() => setActiveTab("settings")} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: activeTab === "settings" ? "#10b981" : subText }} title="Settings Tab">
             <Settings size={14} />
           </button>
 
@@ -1330,35 +1514,6 @@ export function App() {
           </button>
         </div>
       </footer>
-
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4 border" style={{ background: dark ? "#0f172a" : "#ffffff", borderColor: border, color: titleText }}>
-            <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: border }}>
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">MC</span>
-                Launcher Settings
-              </h3>
-              <button onClick={() => setIsSettingsOpen(false)} className="hover:opacity-75" style={{ color: subText }}><X size={16} /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase" style={{ color: subText }}>Max RAM: {config.max_ram_mb} MB</label>
-                <input type="range" min="1024" max="16384" step="512" value={config.max_ram_mb} onChange={(e) => setConfig({ ...config, max_ram_mb: Number(e.target.value) })} className="w-full accent-emerald-500 cursor-pointer mt-1" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase" style={{ color: subText }}>Java Path</label>
-                <input type="text" value={config.java_path} onChange={(e) => setConfig({ ...config, java_path: e.target.value })} className="w-full p-2 mt-1 rounded-xl text-xs font-mono outline-none border font-bold" style={{ background: inputBg, borderColor: border, color: titleText }} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t" style={{ borderColor: border }}>
-              <button onClick={() => setIsSettingsOpen(false)} className="px-3.5 py-1.5 rounded-xl text-xs font-bold border" style={{ background: btnBg, borderColor: border, color: titleText }}>Cancel</button>
-              <button onClick={() => { invoke("update_config", { config }).catch(() => {}); setIsSettingsOpen(false); }} className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-md">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
