@@ -107,18 +107,19 @@ async fn install_mod_loader_cmd(
 }
 
 #[tauri::command]
-async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, account: Account, mut config: AppConfig) -> Result<u32, String> {
-    if config.java_path.trim() == "java" || config.java_path.trim().is_empty() || config.java_path.contains("jre-1.8") {
-        if let Ok(portable_java) = ensure_portable_java21_with_app(&app_handle, &config.game_dir).await {
-            config.java_path = portable_java;
-            save_config(&config).ok();
+async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, account: Account, config: AppConfig) -> Result<u32, String> {
+    // Đang dùng java nào thì giữ nguyên java đó! Chỉ khi java_path trống hoặc là "java" mặc định mới tự tải JRE 21.
+    let mut final_config = config.clone();
+    if final_config.java_path.trim() == "java" || final_config.java_path.trim().is_empty() {
+        if let Ok(portable_java) = ensure_portable_java21_with_app(&app_handle, &final_config.game_dir).await {
+            final_config.java_path = portable_java;
+            save_config(&final_config).ok();
         }
     }
 
-    // Đảm bảo 100% tất cả file libraries .jar của phiên bản đã được chuẩn bị đầy đủ trước khi mở game
-    let _ = ensure_vanilla_version(&config.game_dir, &version_id).await;
+    let _ = ensure_vanilla_version(&final_config.game_dir, &version_id).await;
 
-    launch_game(&version_id, &account, &config)
+    launch_game(&version_id, &account, &final_config)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

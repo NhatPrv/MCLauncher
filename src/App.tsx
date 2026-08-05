@@ -170,7 +170,7 @@ function formatBytes(bytes: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — STOP BUTTON & DOWNLOAD PROGRESS STATS
+   MAIN COMPONENT — EXACT PROGRESS & CLEAN STOP BUTTON
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -233,7 +233,7 @@ export function App() {
     const unlistenPromise = listen<DownloadProgressPayload>("download_progress", (event) => {
       setDownloadProgress(event.payload);
       if (event.payload.status === "finished" || event.payload.percentage >= 100) {
-        setTimeout(() => setDownloadProgress(null), 2500);
+        setTimeout(() => setDownloadProgress(null), 2000);
       }
     });
 
@@ -612,6 +612,9 @@ export function App() {
   );
 
   const isBusyDownloadingOrLaunching = isLaunching || isDownloadingJre || installingVersionId !== null;
+
+  // Tính phần trăm chính xác khớp 100% giữa thanh tiến trình và thông số %
+  const currentPercentage = downloadProgress ? Math.min(100, Math.max(0, downloadProgress.percentage)) : 0;
 
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
@@ -1505,17 +1508,17 @@ export function App() {
                   </span>
                 )}
                 <span className="text-emerald-500 font-black">
-                  {downloadProgress ? `${downloadProgress.percentage.toFixed(1)}%` : "0.0%"}
+                  {currentPercentage.toFixed(1)}%
                 </span>
               </div>
             </div>
 
-            {/* Glowing Smooth Progress Bar */}
+            {/* Glowing Smooth Progress Bar - CHÍNH XÁC NẠP THEO HẰNG SỐ CURRENT PERCENTAGE */}
             <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: dark ? "#1e293b" : "#e2e8f0" }}>
               <div
                 className="h-full rounded-full transition-all duration-300"
                 style={{
-                  width: `${Math.max(5, downloadProgress ? downloadProgress.percentage : 15)}%`,
+                  width: `${currentPercentage}%`,
                   background: "linear-gradient(90deg, #10b981 0%, #06b6d4 100%)",
                   boxShadow: "0 0 10px rgba(16,185,129,0.5)",
                 }}
@@ -1686,24 +1689,16 @@ export function App() {
               <Folder size={14} />
             </button>
 
-            {/* PLAY / STOP Button */}
+            {/* PLAY / STOP Button — CLEAN MINIMALIST STOP BUTTON WITH ICON ONLY */}
             {isBusyDownloadingOrLaunching ? (
               <button
                 onClick={handleStopLaunchOrDownload}
-                className="flex items-center gap-3 px-7 rounded-xl font-bold transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white shadow-lg"
-                style={{
-                  height: 46,
-                  background: "linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%)",
-                  boxShadow: "0 0 24px rgba(239,68,68,0.5), 0 4px 14px rgba(0,0,0,0.3)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                }}
-                title="Bấm để HỦY TẢI / STOP ngay lập tức"
+                className="flex items-center gap-2 px-6 rounded-xl font-extrabold text-xs transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white bg-red-600 hover:bg-red-500 shadow-md border border-white/20"
+                style={{ height: 46 }}
+                title="Bấm để DỪNG / HỦY TIẾN TRÌNH"
               >
-                <Square size={18} fill="currentColor" />
-                <div className="text-left">
-                  <div className="text-base font-extrabold tracking-wider leading-none">STOP</div>
-                  <div className="text-[8px] tracking-[0.15em] opacity-90 uppercase leading-none mt-0.5 font-medium">HỦY TẢI NGAY</div>
-                </div>
+                <Square size={14} fill="currentColor" />
+                <span className="tracking-wider text-sm font-black">STOP</span>
               </button>
             ) : (
               <button
