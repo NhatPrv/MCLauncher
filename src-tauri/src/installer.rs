@@ -33,6 +33,7 @@ struct LibraryDownloads {
 
 #[derive(Deserialize)]
 struct LibraryItem {
+    name: Option<String>,
     downloads: Option<LibraryDownloads>,
 }
 
@@ -40,6 +41,23 @@ struct LibraryItem {
 struct VersionPackageJson {
     downloads: VersionJsonDownload,
     libraries: Option<Vec<LibraryItem>>,
+}
+
+fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
+    let parts: Vec<&str> = maven_name.split(':').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let group = parts[0].replace('.', "/");
+    let artifact = parts[1];
+    let version = parts[2];
+    let classifier = if parts.len() > 3 { format!("-{}", parts[3]) } else { "".to_string() };
+
+    let filename = format!("{}-{}{}.jar", artifact, version, classifier);
+    let rel_path = format!("{}/{}/{}/{}", group, artifact, version, filename);
+    let url = format!("https://libraries.minecraft.net/{}", rel_path);
+
+    Some((url, PathBuf::from(rel_path)))
 }
 
 /// Tự động tải Portable JRE 21 về thư mục .minecraft/runtime/java-runtime-21 với tiến trình thời gian thực
@@ -71,7 +89,6 @@ pub async fn ensure_portable_java21_with_app<R: tauri::Runtime>(
 
     let jre_url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jre_x64_windows_hotspot_21.0.4_7.zip";
     
-    // Tải với tiến trình hiển thị cho người dùng
     download_file_with_progress(app_handle, jre_url, &zip_path, "Portable JRE 21").await?;
 
     if let Ok(file) = File::open(&zip_path) {
@@ -209,9 +226,11 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
 
 pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Result<(), String> {
     let base_path = PathBuf::from(game_dir);
-    let version_dir = base_path.join("versions").join(game_version);
-    let client_jar = version_dir.join(format!("{}.jar", game_version));
-    let version_json = version_dir.join(format!("{}.json", game_version));
+    let vanilla_ver = game_version.split('-').next().unwrap_or(game_version);
+
+    let version_dir = base_path.join("versions").join(vanilla_ver);
+    let client_jar = version_dir.join(format!("{}.jar", vanilla_ver));
+    let version_json = version_dir.join(format!("{}.json", vanilla_ver));
     let libraries_dir = base_path.join("libraries");
 
     fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
@@ -236,7 +255,7 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
     }
 
     let manifest_data = res.json::<Manifest>().await.map_err(|e| e.to_string())?;
-    if let Some(entry) = manifest_data.versions.into_iter().find(|v| v.id == game_version) {
+    if let Some(entry) = manifest_data.versions.into_iter().find(|v| v.id == vanilla_ver) {
         let pkg_res = client.get(&entry.url).send().await.map_err(|e| e.to_string())?;
         let pkg_text = pkg_res.text().await.map_err(|e| e.to_string())?;
         fs::write(&version_json, &pkg_text).map_err(|e| e.to_string())?;
@@ -248,16 +267,28 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
 
             if let Some(libs) = pkg_json.libraries {
                 for lib in libs {
-                    if let Some(downloads) = lib.downloads {
-                        if let Some(artifact) = downloads.artifact {
-                            let lib_url = artifact.url;
-                            if let Ok(url_parsed) = reqwest::Url::parse(&lib_url) {
+                    let mut downloaded = false;
+                    if let Some(downloads) = &lib.downloads {
+                        if let Some(artifact) = &downloads.artifact {
+                            let lib_url = &artifact.url;
+                            if let Ok(url_parsed) = reqwest::Url::parse(lib_url) {
                                 let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
                                 if path_segments.len() > 1 {
                                     let rel_path = path_segments[1..].join("/");
                                     let target_lib_path = libraries_dir.join(rel_path);
-                                    let _ = verify_and_download_file(&lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                    let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                    downloaded = true;
                                 }
+                            }
+                        }
+                    }
+
+                    // Fallback theo Maven name nếu downloads.artifact bị thiếu trong JSON
+                    if !downloaded {
+                        if let Some(name) = &lib.name {
+                            if let Some((url, rel_path)) = maven_to_url(name) {
+                                let target_lib_path = libraries_dir.join(rel_path);
+                                let _ = verify_and_download_file(&url, &target_lib_path, None).await;
                             }
                         }
                     }

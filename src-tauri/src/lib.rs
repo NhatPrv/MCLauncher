@@ -8,7 +8,7 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader, get_installed_versions, ensure_portable_java21, ensure_portable_java21_with_app};
+use installer::{ModLoaderType, install_mod_loader, get_installed_versions, ensure_portable_java21, ensure_portable_java21_with_app, ensure_vanilla_version};
 use launcher::launch_game;
 
 #[tauri::command]
@@ -114,6 +114,9 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
             save_config(&config).ok();
         }
     }
+
+    // Đảm bảo 100% tất cả file libraries .jar của phiên bản đã được chuẩn bị đầy đủ trước khi mở game
+    let _ = ensure_vanilla_version(&config.game_dir, &version_id).await;
 
     launch_game(&version_id, &account, &config)
 }
