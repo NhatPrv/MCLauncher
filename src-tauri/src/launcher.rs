@@ -1,7 +1,7 @@
 use std::process::Command as SysCommand;
 use std::path::{Path, PathBuf};
 use std::fs;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, detect_java_path};
 use crate::auth::Account;
 
 fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
@@ -45,8 +45,9 @@ pub fn launch_game(
         ));
     }
 
-    let java_bin = if config.java_path.trim().is_empty() {
-        "java".to_string()
+    // Ưu tiên phát hiện Java 21 / JDK 17 nếu config đang là "java" mặc định
+    let java_bin = if config.java_path.trim().is_empty() || config.java_path.trim() == "java" {
+        detect_java_path().unwrap_or_else(|| "java".to_string())
     } else {
         config.java_path.clone()
     };
@@ -107,7 +108,7 @@ pub fn launch_game(
         .spawn()
         .map_err(|e| {
             format!(
-                "Không thể mở tiến trình Java ('{}'): {}.\nVui lòng mở Tab Settings và dán đường dẫn file java.exe thuộc JDK 17 hoặc JDK 21!",
+                "Không thể mở tiến trình Java ('{}'): {}.\nVui lòng mở Tab Settings và bấm Auto-Detect hoặc chọn file java.exe thuộc JDK 21!",
                 java_bin, e
             )
         })?;
