@@ -103,7 +103,7 @@ interface DownloadProgressPayload {
   status: string;
 }
 
-/* ─── Loader Metadata (Chuẩn Phân Loại Minecraft) ───────────────────────── */
+/* ─── Loader Metadata (Standard Minecraft Classifications) ───────────────────────── */
 const LOADER_META: Record<LoaderType, { emoji: string; color: string; bg: string; label: string }> = {
   vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla & OptiFine" },
   fabric:   { emoji: "⚡", color: "#d97706", bg: "rgba(245,158,11,0.15)",  label: "Fabric"             },
@@ -128,7 +128,7 @@ const PATCH_NOTES = [
 ];
 
 const CATEGORIES: { id: CategoryType; label: string; icon: React.ElementType; color: string; projectType?: string }[] = [
-  { id: "all",          label: "Tất cả",          icon: Layers,    color: "#10b981" },
+  { id: "all",          label: "All",             icon: Layers,    color: "#10b981" },
   { id: "modpack",      label: "Modpacks",        icon: Package,   color: "#818cf8", projectType: "modpack" },
   { id: "mod",          label: "Mods",            icon: Zap,       color: "#f59e0b", projectType: "mod" },
   { id: "resourcepack", label: "Resource Packs", icon: Palette,   color: "#ec4899", projectType: "resourcepack" },
@@ -173,7 +173,7 @@ function formatBytes(bytes: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — RESPONSIVE ICON-ONLY TOP NAVBAR ON SMALL SCREENS
+   MAIN COMPONENT — FULL ENGLISH UNIFIED UI WITH DYNAMIC EMPTY DROPBOX
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -249,19 +249,19 @@ export function App() {
     };
   }, []);
 
-  /* ── 1. Quét Danh Sách Phiên Bản Thực Sự Đã Tải Trên Đĩa Cứng ── */
+  /* ── 1. Scan Installed Version Folders from Disk ── */
   const refreshInstalledVersionsFromDisk = useCallback(async (gameDir: string) => {
     try {
       const realInstalledIds = await invoke<string[]>("get_installed_versions_cmd", { gameDir });
       setInstalledDiskVersionIds(realInstalledIds || []);
       return realInstalledIds || [];
     } catch (err) {
-      console.error("Lỗi quét phiên bản đã tải từ đĩa cứng:", err);
+      console.error("Error scanning installed versions from disk:", err);
       return [];
     }
   }, []);
 
-  /* Helper kiểm tra chính xác tuyệt đối xem ID phiên bản có tồn tại trên đĩa cứng không */
+  /* Helper to strictly match version IDs on disk */
   const isVersionInstalledOnDisk = (targetId: string, realDiskIds: string[]) => {
     return realDiskIds.some(
       (diskId) => diskId === targetId || diskId === `${targetId}-latest`
@@ -331,7 +331,6 @@ export function App() {
           ...vanillaList,
         ];
 
-        // Tự động quét và bổ sung 100% các phiên bản đĩa thực tế nếu chưa có trong danh sách tĩnh
         const customDiskVersions: VersionItem[] = [];
         for (const diskId of realDiskIds) {
           const isMatched = predefinedList.some(
@@ -350,7 +349,7 @@ export function App() {
             customDiskVersions.push({
               id: diskId,
               label: diskId,
-              sub: "Phiên bản trên đĩa thực tế",
+              sub: "Disk Version Folder",
               loader: loader,
               versionStr: verStr,
               isInstalled: true,
@@ -369,7 +368,7 @@ export function App() {
         }
       }
     } catch (err) {
-      console.error("Lỗi fetch phiên bản Mojang:", err);
+      console.error("Error fetching Mojang versions:", err);
     } finally {
       setIsLoadingVersions(false);
     }
@@ -462,7 +461,7 @@ export function App() {
       setConfigSaveSuccess(true);
       setTimeout(() => setConfigSaveSuccess(false), 2500);
     } catch (err: any) {
-      setErrorLogModal(`[CONFIG_SAVE_ERROR]\nLỗi lưu cấu hình ứng dụng: ${err?.message || err}`);
+      setErrorLogModal(`[CONFIG_SAVE_ERROR]\nError saving configuration: ${err?.message || err}`);
     } finally {
       setIsSavingConfig(false);
     }
@@ -475,11 +474,10 @@ export function App() {
         setConfig((prev) => ({ ...prev, java_path: javaPath }));
       }
     } catch (err: any) {
-      setErrorLogModal(`[JAVA_DETECT_ERROR]\nLỗi tự động phát hiện Java: ${err?.message || err}`);
+      setErrorLogModal(`[JAVA_DETECT_ERROR]\nError auto-detecting Java runtime: ${err?.message || err}`);
     }
   };
 
-  // Tải bộ Portable JRE 21 tự động về máy
   const handleDownloadPortableJre21 = async () => {
     setIsDownloadingJre(true);
     try {
@@ -488,13 +486,12 @@ export function App() {
         setConfig((prev) => ({ ...prev, java_path: javaPath }));
       }
     } catch (err: any) {
-      setErrorLogModal(`[JRE21_DOWNLOAD_ERROR]\nLỗi tự động tải bộ Portable JRE 21: ${err?.message || err}`);
+      setErrorLogModal(`[JRE21_DOWNLOAD_ERROR]\nError downloading Portable JRE 21: ${err?.message || err}`);
     } finally {
       setIsDownloadingJre(false);
     }
   };
 
-  // Browse java.exe file via native file picker
   const handleBrowseJavaFile = async () => {
     try {
       const selected = await invoke<string | null>("select_java_file_cmd");
@@ -502,11 +499,10 @@ export function App() {
         setConfig((prev) => ({ ...prev, java_path: selected }));
       }
     } catch (err: any) {
-      setErrorLogModal(`[FILE_PICKER_ERROR]\nLỗi chọn file Java Executable: ${err?.message || err}`);
+      setErrorLogModal(`[FILE_PICKER_ERROR]\nError selecting Java executable: ${err?.message || err}`);
     }
   };
 
-  // Stop / Cancel Download or Launching Process
   const handleStopLaunchOrDownload = () => {
     setIsLaunching(false);
     setIsDownloadingJre(false);
@@ -542,7 +538,6 @@ export function App() {
 
   const handleOpenFolder = () => { invoke("plugin:opener|open_path", { path: config.game_dir }).catch(() => alert(`Game dir: ${config.game_dir}`)); };
 
-  // Install / Download Real Version Handler
   const handleInstallVersion = async (targetVer: VersionItem) => {
     setInstallingVersionId(targetVer.id);
     try {
@@ -565,19 +560,18 @@ export function App() {
       const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
 
       setFetchedVersionsList((prev) =>
-        prev.map((v) => (v.id === targetVer.id || realDiskIds.includes(v.id) ? { ...v, isInstalled: true } : v))
+        prev.map((v) => (v.id === targetVer.id || isVersionInstalledOnDisk(v.id, realDiskIds) ? { ...v, isInstalled: true } : v))
       );
       setSelectedVersion({ ...targetVer, isInstalled: true });
     } catch (err: any) {
-      setErrorLogModal(`[VERSION_INSTALL_ERROR]\nLỗi tải phiên bản ${targetVer.label}: ${err?.message || err}`);
+      setErrorLogModal(`[VERSION_INSTALL_ERROR]\nError downloading version ${targetVer.label}: ${err?.message || err}`);
     } finally {
       setInstallingVersionId(null);
     }
   };
 
-  // Uninstall / Remove Version Handler (XÓA THỰC SỰ THƯ MỤC TRÊN ĐĨA CỨNG)
   const handleUninstallVersion = async (targetVer: VersionItem) => {
-    if (confirm(`Bạn có chắc chắn muốn gỡ và XÓA HOÀN TOÀN phiên bản ${targetVer.label} khỏi đĩa cứng không?`)) {
+    if (confirm(`Are you sure you want to completely delete version ${targetVer.label} from disk?`)) {
       try {
         await invoke("delete_installed_version_cmd", {
           gameDir: config.game_dir,
@@ -588,7 +582,7 @@ export function App() {
 
         setFetchedVersionsList((prev) =>
           prev
-            .filter((v) => !v.sub.includes("đĩa thực tế") || isVersionInstalledOnDisk(v.id, realDiskIds))
+            .filter((v) => !v.sub.includes("Disk Version") || isVersionInstalledOnDisk(v.id, realDiskIds))
             .map((v) =>
               isVersionInstalledOnDisk(v.id, realDiskIds) ? v : { ...v, isInstalled: false }
             )
@@ -598,12 +592,11 @@ export function App() {
           setSelectedVersion({ ...targetVer, isInstalled: false });
         }
       } catch (err: any) {
-        setErrorLogModal(`[VERSION_DELETE_ERROR]\nLỗi xóa thư mục phiên bản ${targetVer.label}: ${err?.message || err}`);
+        setErrorLogModal(`[VERSION_DELETE_ERROR]\nError deleting version folder ${targetVer.label}: ${err?.message || err}`);
       }
     }
   };
 
-  // Add new offline account
   const handleAddOfflineAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!offlineInput.trim()) return;
@@ -613,11 +606,10 @@ export function App() {
       setAccount(newAcc);
       setOfflineInput("");
     } catch (err: any) {
-      setErrorLogModal(`[OFFLINE_LOGIN_ERROR]\nLỗi tạo tài khoản Offline: ${err?.message || err}`);
+      setErrorLogModal(`[OFFLINE_LOGIN_ERROR]\nError creating offline account: ${err?.message || err}`);
     }
   };
 
-  // Add Microsoft account OAuth2
   const handleAddMicrosoftAccount = async () => {
     setIsLoggingInMs(true);
     try {
@@ -627,11 +619,10 @@ export function App() {
       setIsLoggingInMs(false);
     } catch (err: any) {
       setIsLoggingInMs(false);
-      setErrorLogModal(`[MICROSOFT_OAUTH_ERROR]\nXác thực Microsoft OAuth2 thất bại:\n${err?.message || err}`);
+      setErrorLogModal(`[MICROSOFT_OAUTH_ERROR]\nMicrosoft OAuth2 authentication failed:\n${err?.message || err}`);
     }
   };
 
-  // Save edited account name
   const handleSaveEditAccount = (accToEdit: Account) => {
     if (!editNameInput.trim()) return;
     const updatedList = accountsList.map((a) => {
@@ -648,7 +639,6 @@ export function App() {
     setEditNameInput("");
   };
 
-  // Delete account from app
   const handleDeleteAccount = (accToDelete: Account) => {
     const updatedList = accountsList.filter((a) => a.uuid !== accToDelete.uuid);
     setAccountsList(updatedList);
@@ -657,7 +647,6 @@ export function App() {
     }
   };
 
-  // Copy Error Log to Clipboard for AI Diagnostics
   const handleCopyErrorLog = () => {
     if (errorLogModal) {
       navigator.clipboard.writeText(errorLogModal);
@@ -666,7 +655,6 @@ export function App() {
     }
   };
 
-  // Filter versions by loader and search query
   const filteredVersionsTab = fetchedVersionsList.filter((v) => {
     const matchesLoader = v.loader === versionTabLoader;
     const matchesSearch = v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
@@ -674,7 +662,7 @@ export function App() {
     return matchesLoader && matchesSearch;
   });
 
-  // Dropdown list CHỈ HIỂN THỊ 100% CÁC THƯ MỤC PHIÊN BẢN ĐÃ TẢI THỰC SỰ TRÊN ĐĨA CỨNG (KHÔNG LẤY TỪ DB/MANIFEST)
+  /* ── Map 100% STRICTLY from Disk Folder List (installedDiskVersionIds) ── */
   const installedVersionsForDropdown = installedDiskVersionIds.map((diskFolder) => {
     const matched = fetchedVersionsList.find(
       (v) => v.id === diskFolder || `${v.id}-latest` === diskFolder
@@ -695,7 +683,7 @@ export function App() {
     return {
       id: diskFolder,
       label: diskFolder,
-      sub: "Phiên bản trên đĩa thực tế",
+      sub: "Disk Version Folder",
       loader: loader,
       versionStr: verStr,
       isInstalled: true,
@@ -703,18 +691,15 @@ export function App() {
   });
 
   const isBusyDownloadingOrLaunching = isLaunching || isDownloadingJre || installingVersionId !== null;
-
-  // Tính phần trăm chính xác khớp 100% giữa thanh tiến trình và thông số %
   const currentPercentage = downloadProgress ? Math.min(100, Math.max(0, downloadProgress.percentage)) : 0;
 
-  // Kiểm tra Java 21 đã có/đã cài chưa để tự động ẩn nút "Tải Java 21"
   const isJava21AlreadyInstalled =
     config.java_path.toLowerCase().includes("java-runtime-21") ||
     config.java_path.toLowerCase().includes("jdk-21") ||
     config.java_path.toLowerCase().includes("jre-21") ||
     config.java_path.toLowerCase().includes("gamma");
 
-  /* ── Dynamic Contrast Color Tokens */
+  /* Dynamic Contrast Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
   const subText      = dark ? "#94a3b8" : "#475569";
   const titleText    = dark ? "#f8fafc" : "#0f172a";
@@ -723,22 +708,19 @@ export function App() {
   const btnBg        = dark ? "rgba(30,41,59,0.7)" : "rgba(226,232,240,0.9)";
   const inputBg      = dark ? "rgba(15,23,42,0.8)" : "#ffffff";
 
-  // Prominent Account Item Background Tokens
   const itemBgNormal = dark ? "#1e293b" : "#ffffff";
   const itemBgActive = dark ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.08)";
   const itemBorderNormal = dark ? "#334155" : "#cbd5e1";
 
   return (
     <div className={`w-screen h-screen flex flex-col overflow-hidden select-none transition-colors duration-200 ${dark ? "dark bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
-      {/* Background patterns */}
       {dark && (
         <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "linear-gradient(rgba(30,41,59,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(30,41,59,0.3) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
       )}
       <div className="absolute inset-0 pointer-events-none" style={{ background: dark ? "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16,185,129,0.08) 0%, transparent 60%)" : "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16,185,129,0.04) 0%, transparent 60%)" }} />
 
-      {/* ═══ TOP NAVBAR (RESPONSIVE ICON-ONLY MODE WHEN SMALL SCREEN) ═══ */}
+      {/* ═══ TOP NAVBAR ═══ */}
       <nav className="relative z-20 flex items-center justify-between px-4 md:px-6 flex-shrink-0 h-14 border-b backdrop-blur-md transition-colors gap-2" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.88)" : "rgba(255,255,255,0.88)" }}>
-        {/* Logo Brand */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 0 12px rgba(16,185,129,0.5)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="rgba(255,255,255,0.9)" /><path d="M12 2L3 7l9 5 9-5L12 2z" fill="rgba(255,255,255,0.4)" /></svg>
@@ -754,7 +736,6 @@ export function App() {
           </div>
         </div>
 
-        {/* Center Tabs — Automatically Switches to Icon-Only on Small / Compact Screens */}
         <div className="flex items-center gap-1 md:gap-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
           {([
             { id: "home", label: "Home & News", icon: Newspaper },
@@ -777,13 +758,11 @@ export function App() {
               }}
             >
               <Icon size={15} className="flex-shrink-0" />
-              {/* Tên nút tự động ẩn đi (Chỉ hiện Icon) khi chiều rộng cửa sổ bị thu nhỏ */}
               <span className="hidden min-[1120px]:inline whitespace-nowrap">{label}</span>
             </button>
           ))}
         </div>
 
-        {/* Right Theme Switcher */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
             {dark ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
@@ -800,7 +779,6 @@ export function App() {
         {/* ─── TAB: HOME ─── */}
         {activeTab === "home" && (
           <div className="max-w-7xl mx-auto space-y-5">
-            {/* Hero Banner Split */}
             <div className="relative rounded-2xl overflow-hidden min-h-[200px] flex flex-col md:flex-row border shadow-sm" style={{ background: heroBg, borderColor: border }}>
               <div className="flex-1 p-6 z-10 flex flex-col justify-center max-w-2xl">
                 <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -843,9 +821,7 @@ export function App() {
               </div>
             </div>
 
-            {/* 3-Column Responsive Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* News Card */}
               <div className="rounded-2xl overflow-hidden transition-all hover:scale-[1.01] cursor-pointer group border shadow-sm" style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}>
                 <div className="relative h-32 overflow-hidden">
                   <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=500&h=200&fit=crop&auto=format" alt="News" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -859,7 +835,6 @@ export function App() {
                 </div>
               </div>
 
-              {/* Fabric Card */}
               <div className="rounded-2xl overflow-hidden transition-all hover:scale-[1.01] cursor-pointer group border shadow-sm" style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}>
                 <div className="relative h-32 overflow-hidden flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)" }}>
                   <div className="text-center z-10">
@@ -880,7 +855,6 @@ export function App() {
                 </div>
               </div>
 
-              {/* Iris Shaders Card */}
               <div className="rounded-2xl overflow-hidden transition-all hover:scale-[1.01] cursor-pointer group md:col-span-2 lg:col-span-1 border shadow-sm" style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}>
                 <div className="relative h-32 overflow-hidden">
                   <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=200&fit=crop&auto=format" alt="Shaders" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -897,7 +871,6 @@ export function App() {
               </div>
             </div>
 
-            {/* Featured Servers Row */}
             <div className="rounded-2xl p-4 border shadow-sm" style={{ background: cardBg, borderColor: border, backdropFilter: "blur(8px)" }}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -937,11 +910,11 @@ export function App() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Minecraft Game Versions</h2>
                   <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
-                    Mojang API Official
+                    Mojang Official API
                   </span>
                 </div>
                 <p className="text-xs font-medium mt-1" style={{ color: subText }}>
-                  Danh sách phiên bản sắp xếp theo từng hàng ngăn nắp. Chỉ những phiên bản có dữ liệu thực sự trên đĩa cứng mới hiển thị nhãn Đã Tải.
+                  Official Minecraft releases and custom mod loaders. Versions found on disk will display an Installed badge.
                 </p>
               </div>
 
@@ -951,14 +924,13 @@ export function App() {
                   type="text"
                   value={versionSearchQuery}
                   onChange={(e) => setVersionSearchQuery(e.target.value)}
-                  placeholder="Tìm phiên bản (VD: 1.21.1, 1.20)..."
+                  placeholder="Search versions (e.g. 1.21.1, 1.20)..."
                   className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
                   style={{ background: inputBg, borderColor: border, color: titleText }}
                 />
               </div>
             </div>
 
-            {/* Sub-tabs / Loader Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
               {(["vanilla", "fabric", "forge", "neoforge", "quilt", "iris"] as LoaderType[]).map((loaderKey) => {
                 const meta = LOADER_META[loaderKey];
@@ -983,11 +955,10 @@ export function App() {
               })}
             </div>
 
-            {/* Versions Vertical List — Each Version Takes Full Row */}
             {isLoadingVersions ? (
               <div className="py-16 text-center space-y-3">
                 <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
-                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải danh sách phiên bản chính thức từ Mojang API & quét đĩa cứng...</p>
+                <p className="text-xs font-bold" style={{ color: subText }}>Loading official version manifest & scanning disk folders...</p>
               </div>
             ) : filteredVersionsTab.length > 0 ? (
               <div className="space-y-3">
@@ -1015,7 +986,6 @@ export function App() {
                         borderColor: v.isInstalled ? "#10b981" : isSelected ? "#6366f1" : itemBorderNormal,
                       }}
                     >
-                      {/* Left: Loader Badge, Title, Release Sub info */}
                       <div className="flex items-center gap-4 min-w-0">
                         <LoaderBadge loader={v.loader} />
                         <div className="min-w-0">
@@ -1031,13 +1001,12 @@ export function App() {
                         </div>
                       </div>
 
-                      {/* Right Action Buttons */}
                       <div className="flex items-center gap-2.5 self-end md:self-auto" onClick={(e) => e.stopPropagation()}>
                         {v.isInstalled ? (
                           <>
                             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 font-extrabold text-xs">
                               <CheckCircle size={15} />
-                              <span>Đã tải (V)</span>
+                              <span>Installed</span>
                             </div>
 
                             <button
@@ -1053,10 +1022,10 @@ export function App() {
                             <button
                               onClick={() => handleUninstallVersion(v)}
                               className="px-3 py-2 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 font-bold text-xs flex items-center gap-1 transition-all hover:scale-105"
-                              title="Gỡ phiên bản khỏi máy"
+                              title="Delete version folder from disk"
                             >
                               <Trash2 size={13} />
-                              <span className="hidden sm:inline">Gỡ</span>
+                              <span className="hidden sm:inline">Uninstall</span>
                             </button>
                           </>
                         ) : (
@@ -1070,7 +1039,7 @@ export function App() {
                             ) : (
                               <Download size={13} />
                             )}
-                            <span>{isInstalling ? "Downloading..." : "Tải về"}</span>
+                            <span>{isInstalling ? "Downloading..." : "Download"}</span>
                           </button>
                         )}
                       </div>
@@ -1081,8 +1050,8 @@ export function App() {
             ) : (
               <div className="py-16 text-center" style={{ color: subText }}>
                 <Search size={36} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-bold">Không tìm thấy phiên bản phù hợp trong mục này</p>
-                <p className="text-xs mt-1">Thử thay đổi từ khóa hoặc chọn loại Loader khác.</p>
+                <p className="text-sm font-bold">No matching version found</p>
+                <p className="text-xs mt-1">Try changing your search keywords or select another Loader category.</p>
               </div>
             )}
           </div>
@@ -1091,16 +1060,15 @@ export function App() {
         {/* ─── TAB: MODPACKS & MODRINTH REAL API GALLERY ─── */}
         {activeTab === "mods" && (
           <div className="max-w-7xl mx-auto space-y-5">
-            {/* Gallery Header & Search Bar */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Modpacks & Content Gallery</h2>
                   <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
-                    Modrinth API Live
+                    Modrinth Official API
                   </span>
                 </div>
-                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Khám phá và tải trực tiếp Modpacks, Mods, Shaders và Resource Packs từ máy chủ Modrinth chính thức.</p>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Discover and install Modpacks, Mods, Shaders and Resource Packs directly from Modrinth.</p>
               </div>
 
               <div className="relative w-full md:w-72">
@@ -1109,7 +1077,7 @@ export function App() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm kiếm Modpack, Shader, Mod..."
+                  placeholder="Search Modpacks, Shaders, Mods..."
                   className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
                   style={{ background: inputBg, borderColor: border, color: titleText }}
                 />
@@ -1121,7 +1089,6 @@ export function App() {
               </div>
             </div>
 
-            {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
               {CATEGORIES.map((cat) => {
                 const Icon = cat.icon;
@@ -1148,11 +1115,10 @@ export function App() {
               })}
             </div>
 
-            {/* Gallery Items Grid (Modrinth REST API Data) */}
             {isLoadingApi ? (
               <div className="py-16 text-center space-y-3">
                 <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
-                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải dữ liệu thực tế từ Modrinth API...</p>
+                <p className="text-xs font-bold" style={{ color: subText }}>Loading live content from Modrinth API...</p>
               </div>
             ) : modrinthItems.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1179,7 +1145,7 @@ export function App() {
                         </div>
 
                         <h4 className="font-bold text-sm mb-1 group-hover:text-emerald-500 transition-colors line-clamp-1" style={{ color: titleText }}>{item.title}</h4>
-                        <p className="text-xs leading-relaxed line-clamp-2 font-medium mb-3" style={{ color: subText }}>{item.description || "Không có mô tả chi tiết."}</p>
+                        <p className="text-xs leading-relaxed line-clamp-2 font-medium mb-3" style={{ color: subText }}>{item.description || "No description available."}</p>
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: border }}>
@@ -1201,8 +1167,8 @@ export function App() {
             ) : (
               <div className="py-16 text-center" style={{ color: subText }}>
                 <Search size={36} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-bold">Không tìm thấy nội dung phù hợp trên Modrinth</p>
-                <p className="text-xs mt-1">Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.</p>
+                <p className="text-sm font-bold">No content found on Modrinth</p>
+                <p className="text-xs mt-1">Try changing your search query or select another category.</p>
               </div>
             )}
           </div>
@@ -1214,7 +1180,7 @@ export function App() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-black tracking-tight" style={{ color: titleText }}>Account Management</h2>
-                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Quản lý danh sách tài khoản đã kết nối và thêm tài khoản mới vào ứng dụng.</p>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Manage connected user accounts or sign in with a new account.</p>
               </div>
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold shadow-sm" style={{ background: dark ? "#1e293b" : "#ffffff", borderColor: border, color: titleText }}>
                 <UserCheck size={14} className="text-emerald-500" />
@@ -1222,10 +1188,8 @@ export function App() {
               </div>
             </div>
 
-            {/* 2-Column Layout Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* ── LEFT HALF: Existing Accounts List ── */}
               <div className="space-y-4">
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Users size={15} className="text-emerald-500" />
@@ -1257,7 +1221,6 @@ export function App() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                            {/* Account Type Icon (Microsoft / Offline) */}
                             {accItem.account_type === "Microsoft" ? (
                               <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-md border border-slate-700/50">
                                 <MicrosoftIcon size={20} />
@@ -1308,7 +1271,6 @@ export function App() {
                             </div>
                           </div>
 
-                          {/* Action Buttons: Edit Pencil & Delete Trash */}
                           <div className="flex items-center gap-1.5 ml-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => {
@@ -1317,7 +1279,7 @@ export function App() {
                               }}
                               className="p-2 rounded-xl transition-all border hover:scale-105 shadow-sm"
                               style={{ background: btnBg, borderColor: border, color: subText }}
-                              title="Sửa tên tài khoản"
+                              title="Edit username"
                             >
                               <Pencil size={13} />
                             </button>
@@ -1326,7 +1288,7 @@ export function App() {
                               onClick={() => handleDeleteAccount(accItem)}
                               className="p-2 rounded-xl transition-all border hover:scale-105 hover:text-red-500 hover:border-red-500/50 shadow-sm"
                               style={{ background: btnBg, borderColor: border, color: subText }}
-                              title="Xóa tài khoản khỏi app"
+                              title="Remove account"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -1338,14 +1300,12 @@ export function App() {
                 </div>
               </div>
 
-              {/* ── RIGHT HALF: Add New Account Options ── */}
               <div className="space-y-4">
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Plus size={15} className="text-emerald-500" />
                   <span>Add New Account</span>
                 </h3>
 
-                {/* Option 1: Microsoft Online Account */}
                 <div className="p-5 rounded-2xl border space-y-3.5 shadow-md transition-all hover:border-blue-500/50" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-md border border-slate-700/50">
@@ -1353,7 +1313,7 @@ export function App() {
                     </div>
                     <div>
                       <h4 className="font-bold text-sm" style={{ color: titleText }}>Microsoft Online Account (MSC)</h4>
-                      <p className="text-xs font-medium mt-0.5" style={{ color: subText }}>Đăng nhập tài khoản Microsoft Minecraft chính chủ.</p>
+                      <p className="text-xs font-medium mt-0.5" style={{ color: subText }}>Sign in with official Minecraft Microsoft account.</p>
                     </div>
                   </div>
 
@@ -1372,13 +1332,12 @@ export function App() {
                   </button>
                 </div>
 
-                {/* Option 2: Offline Account (Cracked) */}
                 <div className="p-5 rounded-2xl border space-y-3.5 shadow-md transition-all hover:border-emerald-500/50" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                   <div className="flex items-center gap-3">
                     <OfflineAvatarIcon size={40} />
                     <div>
                       <h4 className="font-bold text-sm" style={{ color: titleText }}>Offline Account (Cracked)</h4>
-                      <p className="text-xs font-medium mt-0.5" style={{ color: subText }}>Tạo tài khoản chơi offline tùy chỉnh tên nhân vật.</p>
+                      <p className="text-xs font-medium mt-0.5" style={{ color: subText }}>Create custom local player username for offline play.</p>
                     </div>
                   </div>
 
@@ -1387,7 +1346,7 @@ export function App() {
                       type="text"
                       value={offlineInput}
                       onChange={(e) => setOfflineInput(e.target.value)}
-                      placeholder="Nhập tên người chơi mới..."
+                      placeholder="Enter new player username..."
                       className="w-full p-2.5 rounded-xl text-xs font-mono outline-none border font-bold"
                       style={{ background: inputBg, borderColor: border, color: titleText }}
                     />
@@ -1415,10 +1374,9 @@ export function App() {
                   <Settings size={24} className="text-emerald-500" />
                   <span>Launcher Settings</span>
                 </h2>
-                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Cấu hình tham số RAM, Java Runtime, độ phân giải cửa sổ và môi trường Minecraft.</p>
+                <p className="text-xs font-medium mt-1" style={{ color: subText }}>Configure RAM allocations, Java runtime path, window resolution, and JVM flags.</p>
               </div>
 
-              {/* Save Button */}
               <button
                 disabled={isSavingConfig}
                 onClick={handleSaveConfig}
@@ -1435,17 +1393,14 @@ export function App() {
               </button>
             </div>
 
-            {/* Settings Sections Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* Section 1: Java & Memory (RAM) */}
               <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Cpu size={16} className="text-emerald-500" />
                   <span>Memory & Java Settings</span>
                 </h3>
 
-                {/* RAM Range Slider */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs font-bold">
                     <span style={{ color: titleText }}>Max Allocated RAM</span>
@@ -1467,7 +1422,6 @@ export function App() {
                   </div>
                 </div>
 
-                {/* Java Executable Path — AUTO HIDE DOWNLOAD BUTTON IF JAVA 21 IS ALREADY INSTALLED */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <label className="text-xs font-bold" style={{ color: titleText }}>Java Executable Path (JDK 17/21)</label>
@@ -1481,10 +1435,10 @@ export function App() {
                           disabled={isDownloadingJre}
                           onClick={handleDownloadPortableJre21}
                           className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20"
-                          title="Tự động tải Java 21 Portable từ Temurin CDN về .minecraft/runtime/"
+                          title="Auto-download Portable JRE 21 from Temurin CDN"
                         >
                           {isDownloadingJre ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                          <span>{isDownloadingJre ? "Downloading JRE 21..." : "Tải Java 21"}</span>
+                          <span>{isDownloadingJre ? "Downloading JRE 21..." : "Download Java 21"}</span>
                         </button>
                       )}
 
@@ -1509,27 +1463,25 @@ export function App() {
                       onClick={handleBrowseJavaFile}
                       className="p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center transition-all hover:scale-105 shadow-sm flex-shrink-0"
                       style={{ background: btnBg, borderColor: border, color: titleText }}
-                      title="Chọn file java.exe trên máy"
+                      title="Browse java.exe executable file"
                     >
                       <Folder size={14} className="text-emerald-500" />
                     </button>
                   </div>
                   <p className="text-[10px] font-medium" style={{ color: subText }}>
                     {isJava21AlreadyInstalled
-                      ? "Máy bạn đã sẵn sàng với Java 21 thích hợp cho Minecraft 1.21.1."
-                      : "Bấm nút Tải Java 21 để launcher tự động tải Portable JRE 21 về máy nếu chưa cài Java 21."}
+                      ? "Your system is ready with JDK 21 suitable for Minecraft 1.21.1."
+                      : "Click Download Java 21 to auto-install Portable JRE 21 to your game folder."}
                   </p>
                 </div>
               </div>
 
-              {/* Section 2: Display & Game Directory */}
               <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <Monitor size={16} className="text-emerald-500" />
                   <span>Display & Game Directory</span>
                 </h3>
 
-                {/* Resolution Width x Height */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold block mb-1" style={{ color: titleText }}>Resolution Width</label>
@@ -1553,7 +1505,6 @@ export function App() {
                   </div>
                 </div>
 
-                {/* Game Directory */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold" style={{ color: titleText }}>Game Directory (.minecraft)</label>
                   <div className="flex items-center gap-2">
@@ -1568,7 +1519,7 @@ export function App() {
                       onClick={handleOpenFolder}
                       className="p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center transition-all hover:scale-105 shadow-sm"
                       style={{ background: btnBg, borderColor: border, color: titleText }}
-                      title="Mở thư mục game"
+                      title="Open game directory folder"
                     >
                       <Folder size={14} />
                     </button>
@@ -1576,7 +1527,6 @@ export function App() {
                 </div>
               </div>
 
-              {/* Section 3: JVM Arguments (Full Width) */}
               <div className="md:col-span-2 p-5 rounded-2xl border space-y-3 shadow-sm" style={{ background: itemBgNormal, borderColor: itemBorderNormal }}>
                 <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2" style={{ color: titleText }}>
                   <HardDrive size={16} className="text-emerald-500" />
@@ -1590,7 +1540,7 @@ export function App() {
                   className="w-full p-3 rounded-xl text-xs font-mono outline-none border font-bold"
                   style={{ background: inputBg, borderColor: border, color: titleText }}
                 />
-                <p className="text-[10px] font-medium" style={{ color: subText }}>Các cờ tối ưu hóa tiến trình Java Garbage Collection (GC) nâng cao tốc độ FPS trong game.</p>
+                <p className="text-[10px] font-medium" style={{ color: subText }}>Java Garbage Collection (GC) flags for boosting game FPS performance.</p>
               </div>
 
             </div>
@@ -1601,14 +1551,13 @@ export function App() {
       {/* ═══ BOTTOM ACTION BAR ═══ */}
       <footer className="relative z-20 flex flex-col flex-shrink-0 border-t backdrop-blur-xl transition-colors" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)" }}>
         
-        {/* Real-time Download Progress Bar Display Above Actions */}
         {(isBusyDownloadingOrLaunching || downloadProgress) && (
           <div className="w-full px-6 pt-3 pb-1 border-b space-y-1.5 transition-all" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.6)" : "rgba(241,245,249,0.8)" }}>
             <div className="flex items-center justify-between text-xs font-bold">
               <div className="flex items-center gap-2 min-w-0" style={{ color: titleText }}>
                 <Activity size={14} className="text-emerald-500 animate-pulse flex-shrink-0" />
                 <span className="truncate">
-                  {downloadProgress ? `Đang tải: ${downloadProgress.file_name}` : "Đang chuẩn bị môi trường & game..."}
+                  {downloadProgress ? `Downloading: ${downloadProgress.file_name}` : "Preparing game environment..."}
                 </span>
               </div>
 
@@ -1624,7 +1573,6 @@ export function App() {
               </div>
             </div>
 
-            {/* Glowing Smooth Progress Bar */}
             <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: dark ? "#1e293b" : "#e2e8f0" }}>
               <div
                 className="h-full rounded-full transition-all duration-300"
@@ -1639,7 +1587,6 @@ export function App() {
         )}
 
         <div className="flex flex-wrap items-center justify-between px-6 py-3 gap-4">
-          {/* Left: Account Selector Card & Dropdown Menu */}
           <div className="relative" ref={accDropRef}>
             <div
               onClick={() => setAccountDropOpen(!accountDropOpen)}
@@ -1664,7 +1611,6 @@ export function App() {
               <ChevronDown size={12} className={`transition-transform ${accountDropOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
             </div>
 
-            {/* Account Dropdown List */}
             {accountDropOpen && (
               <div
                 className="absolute bottom-full mb-2 left-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border w-64"
@@ -1724,23 +1670,32 @@ export function App() {
             )}
           </div>
 
-          {/* Center: Version Selector Dropdown — CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ */}
+          {/* Center: Version Selector Dropdown — STRICTLY SHOWS DYNAMIC EMPTY / INSTALLED FOLDERS */}
           <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
             <div className="relative flex-1">
               <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
-                <LoaderBadge loader={selectedVersion.loader} />
-                <div className="flex-1 text-left min-w-0">
-                  <div className="font-bold text-xs truncate" style={{ color: titleText }}>{selectedVersion.label}</div>
-                  <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{selectedVersion.sub}</div>
-                </div>
+                {installedVersionsForDropdown.length > 0 ? (
+                  <>
+                    <LoaderBadge loader={selectedVersion.loader} />
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="font-bold text-xs truncate" style={{ color: titleText }}>{selectedVersion.label}</div>
+                      <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{selectedVersion.sub}</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="font-bold text-xs text-amber-500 truncate">No version installed</div>
+                    <div className="text-[9px] font-medium text-slate-400 truncate">Click to select or download a version</div>
+                  </div>
+                )}
                 <ChevronDown size={13} className={`transition-transform ${versionOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
               </button>
 
               {versionOpen && (
                 <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border max-h-60 overflow-y-auto" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
                   <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
-                    <span>Installed Versions (Thực Tế)</span>
-                    <span className="text-emerald-500 font-extrabold">{installedVersionsForDropdown.length} đã tải</span>
+                    <span>Installed Versions</span>
+                    <span className="text-emerald-500 font-extrabold">{installedVersionsForDropdown.length} installed</span>
                   </div>
 
                   {installedVersionsForDropdown.length > 0 ? (
@@ -1766,15 +1721,15 @@ export function App() {
                     ))
                   ) : (
                     <div className="p-4 text-center space-y-2">
-                      <p className="text-xs font-bold text-amber-500">Chưa có phiên bản nào được tải về máy!</p>
+                      <p className="text-xs font-bold text-amber-500">No game versions installed yet!</p>
                       <button
                         onClick={() => {
                           setActiveTab("versions");
                           setVersionOpen(false);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all hover:scale-105"
                       >
-                        Sang Tab Versions Tải Ngay
+                        Go to Versions Tab
                       </button>
                     </div>
                   )}
@@ -1782,31 +1737,28 @@ export function App() {
               )}
             </div>
 
-            {/* Button Xem Tất Cả Phiên Bản (Dẫn Sang Tab Versions) */}
             <button
               onClick={() => setActiveTab("versions")}
               className="h-9 px-3 rounded-xl flex items-center gap-1.5 transition-all hover:scale-105 border shadow-sm text-xs font-bold"
               style={{ background: btnBg, borderColor: border, color: titleText }}
-              title="Xem danh sách tất cả các phiên bản"
+              title="View all versions"
             >
               <ListFilter size={14} className="text-emerald-500" />
               <span className="hidden md:inline">Versions</span>
             </button>
           </div>
 
-          {/* Right: Folder Action & PLAY / STOP Button */}
           <div className="flex items-center gap-2.5">
-            <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
+            <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft directory">
               <Folder size={14} />
             </button>
 
-            {/* PLAY / STOP Button */}
             {isBusyDownloadingOrLaunching ? (
               <button
                 onClick={handleStopLaunchOrDownload}
                 className="flex items-center gap-2 px-6 rounded-xl font-extrabold text-xs transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white bg-red-600 hover:bg-red-500 shadow-md border border-white/20"
                 style={{ height: 46 }}
-                title="Bấm để DỪNG / HỦY TIẾN TR TRÌNH"
+                title="Stop or cancel process"
               >
                 <Square size={14} fill="currentColor" />
                 <span className="tracking-wider text-sm font-black">STOP</span>
@@ -1830,14 +1782,14 @@ export function App() {
         </div>
       </footer>
 
-      {/* ═══ ERROR LOG DIALOG MODAL WITH COPY BUTTON FOR AI DIAGNOSTICS ═══ */}
+      {/* ═══ ERROR LOG DIALOG MODAL ═══ */}
       {errorLogModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
           <div className="w-full max-w-2xl rounded-2xl border border-red-500/40 p-6 space-y-4 shadow-2xl overflow-hidden relative" style={{ background: dark ? "#090d16" : "#ffffff" }}>
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: border }}>
               <div className="flex items-center gap-2 text-red-500">
                 <AlertTriangle size={20} className="animate-bounce" />
-                <h3 className="font-extrabold text-base tracking-tight" style={{ color: titleText }}>Khởi Chạy Không Thành Công</h3>
+                <h3 className="font-extrabold text-base tracking-tight" style={{ color: titleText }}>Launch Failed</h3>
               </div>
               <button onClick={() => setErrorLogModal(null)} className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
                 <X size={18} />
@@ -1845,10 +1797,9 @@ export function App() {
             </div>
 
             <p className="text-xs font-medium" style={{ color: subText }}>
-              Đã xảy ra sự cố trong quá trình khởi chạy game hoặc môi trường. Bạn có thể bấm nút <strong>Copy Log</strong> bên dưới để dán vào các AI (ChatGPT / Gemini) nhờ tư vấn giải pháp tra lỗi nhanh nhất!
+              An error occurred during game execution or environment setup. Click <strong>Copy Log</strong> below to share with AI assistants (ChatGPT / Gemini) for fast diagnostics!
             </p>
 
-            {/* Code Log Frame */}
             <div className="relative rounded-xl border bg-slate-950 p-4 font-mono text-xs overflow-x-auto max-h-64 text-red-300 border-red-900/40 shadow-inner" style={{ scrollbarWidth: "thin" }}>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-2 border-b border-slate-800 pb-1 uppercase tracking-widest">
                 <Terminal size={12} /> Traceback Execution Log
@@ -1856,14 +1807,13 @@ export function App() {
               <pre className="whitespace-pre-wrap break-all">{errorLogModal}</pre>
             </div>
 
-            {/* Modal Actions */}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={handleCopyErrorLog}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all hover:scale-105"
               >
                 {copiedLog ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copiedLog ? "Đã Copy Chi Tiết Lỗi!" : "Copy Log Tra Lỗi AI"}</span>
+                <span>{copiedLog ? "Log Copied!" : "Copy Error Log for AI"}</span>
               </button>
 
               <button
@@ -1871,7 +1821,7 @@ export function App() {
                 className="px-4 py-2 rounded-xl border font-bold text-xs transition-colors"
                 style={{ background: btnBg, borderColor: border, color: titleText }}
               >
-                Đóng
+                Close
               </button>
             </div>
           </div>
