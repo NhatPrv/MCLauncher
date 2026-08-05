@@ -151,7 +151,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — SETTINGS PAGE AS FULL NAVBAR TAB
+   MAIN COMPONENT — CLEANED UP OLD SETTINGS BUTTONS
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -572,7 +572,7 @@ export function App() {
           ))}
         </div>
 
-        {/* Right Theme Switcher */}
+        {/* Right Theme Switcher (Chỉ Giữ Nút Dark/Light Mode) */}
         <div className="flex items-center gap-2">
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
             {dark ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
@@ -1195,7 +1195,7 @@ export function App() {
           </div>
         )}
 
-        {/* ─── TAB: FULL SETTINGS PAGE (NO POPUP MODAL) ─── */}
+        {/* ─── TAB: FULL SETTINGS PAGE ─── */}
         {activeTab === "settings" && (
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
@@ -1495,13 +1495,10 @@ export function App() {
           </button>
         </div>
 
-        {/* Right: Quick Actions & PLAY Button */}
+        {/* Right: Folder Action & PLAY Button */}
         <div className="flex items-center gap-2.5">
           <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
             <Folder size={14} />
-          </button>
-          <button onClick={() => setActiveTab("settings")} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: activeTab === "settings" ? "#10b981" : subText }} title="Settings Tab">
-            <Settings size={14} />
           </button>
 
           {/* PLAY Button */}
