@@ -36,9 +36,12 @@ import {
   Monitor,
   HardDrive,
   CheckSquare,
+  Square,
+  Activity,
 } from "lucide-react";
 import { Account, AppConfig } from "./types";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 /* ─── Microsoft SVG Icon Component ───────────────────────────────────────── */
 function MicrosoftIcon({ size = 16 }: { size?: number }) {
@@ -87,6 +90,14 @@ interface ModrinthProject {
   downloads: number;
   icon_url: string | null;
   project_type: string;
+}
+
+interface DownloadProgressPayload {
+  file_name: string;
+  downloaded_bytes: number;
+  total_bytes: number;
+  percentage: number;
+  status: string;
 }
 
 /* ─── Loader Metadata (Chuẩn Phân Loại Minecraft) ───────────────────────── */
@@ -150,8 +161,16 @@ function formatDownloads(num: number): string {
   return num.toString();
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 KB";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — AUTO DOWNLOAD PORTABLE JAVA 21
+   MAIN COMPONENT — STOP BUTTON & DOWNLOAD PROGRESS STATS
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -163,6 +182,9 @@ export function App() {
   const [isSavingConfig, setIsSavingConfig]   = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
   const [isDownloadingJre, setIsDownloadingJre] = useState(false);
+
+  // Real-time Download Progress State
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgressPayload | null>(null);
 
   // Live Fetched Versions State & Real Disk Installed State
   const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
@@ -205,6 +227,20 @@ export function App() {
     game_dir: "./.minecraft",
     theme: "dark",
   });
+
+  /* ── 0. Listen to Real-time Download Progress Events from Rust ── */
+  useEffect(() => {
+    const unlistenPromise = listen<DownloadProgressPayload>("download_progress", (event) => {
+      setDownloadProgress(event.payload);
+      if (event.payload.status === "finished" || event.payload.percentage >= 100) {
+        setTimeout(() => setDownloadProgress(null), 2500);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   /* ── 1. Quét Danh Sách Phiên Bản Thực Sự Đã Tải Trên Đĩa Cứng ── */
   const refreshInstalledVersionsFromDisk = useCallback(async (gameDir: string) => {
@@ -429,7 +465,20 @@ export function App() {
     }
   };
 
+  // Stop / Cancel Download or Launching Process
+  const handleStopLaunchOrDownload = () => {
+    setIsLaunching(false);
+    setIsDownloadingJre(false);
+    setInstallingVersionId(null);
+    setDownloadProgress(null);
+  };
+
   const handlePlay = async () => {
+    if (isLaunching || isDownloadingJre || installingVersionId) {
+      handleStopLaunchOrDownload();
+      return;
+    }
+
     setIsLaunching(true);
     try {
       let acc = account;
@@ -561,6 +610,8 @@ export function App() {
   const installedVersionsForDropdown = fetchedVersionsList.filter(
     (v) => v.isInstalled || installedDiskVersionIds.includes(v.id)
   );
+
+  const isBusyDownloadingOrLaunching = isLaunching || isDownloadingJre || installingVersionId !== null;
 
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
@@ -1434,177 +1485,245 @@ export function App() {
       </main>
 
       {/* ═══ BOTTOM ACTION BAR ═══ */}
-      <footer className="relative z-20 flex flex-wrap items-center justify-between px-6 py-3 gap-4 flex-shrink-0 border-t backdrop-blur-xl transition-colors" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)" }}>
+      <footer className="relative z-20 flex flex-col flex-shrink-0 border-t backdrop-blur-xl transition-colors" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)" }}>
         
-        {/* Left: Account Selector Card & Dropdown Menu */}
-        <div className="relative" ref={accDropRef}>
-          <div
-            onClick={() => setAccountDropOpen(!accountDropOpen)}
-            className="flex items-center gap-3 px-3.5 py-2 rounded-xl cursor-pointer transition-all hover:scale-[1.01] border shadow-sm"
-            style={{ background: btnBg, borderColor: border, minWidth: 170 }}
-          >
-            {account?.account_type === "Microsoft" ? (
-              <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-sm border border-slate-700/50">
-                <MicrosoftIcon size={15} />
+        {/* Real-time Download Progress Bar Display Above Actions */}
+        {(isBusyDownloadingOrLaunching || downloadProgress) && (
+          <div className="w-full px-6 pt-3 pb-1 border-b space-y-1.5 transition-all" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.6)" : "rgba(241,245,249,0.8)" }}>
+            <div className="flex items-center justify-between text-xs font-bold">
+              <div className="flex items-center gap-2 min-w-0" style={{ color: titleText }}>
+                <Activity size={14} className="text-emerald-500 animate-pulse flex-shrink-0" />
+                <span className="truncate">
+                  {downloadProgress ? `Đang tải: ${downloadProgress.file_name}` : "Đang chuẩn bị môi trường & game..."}
+                </span>
               </div>
-            ) : (
-              <OfflineAvatarIcon size={32} />
-            )}
 
-            <div className="flex-1 min-w-0">
-              <div className="font-bold text-xs truncate" style={{ color: titleText }}>{account?.username || "Steve"}</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-emerald-500 font-bold">{account?.account_type || "Offline"}</span>
+              <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[11px]">
+                {downloadProgress && downloadProgress.total_bytes > 0 && (
+                  <span style={{ color: subText }}>
+                    {formatBytes(downloadProgress.downloaded_bytes)} / {formatBytes(downloadProgress.total_bytes)}
+                  </span>
+                )}
+                <span className="text-emerald-500 font-black">
+                  {downloadProgress ? `${downloadProgress.percentage.toFixed(1)}%` : "0.0%"}
+                </span>
               </div>
             </div>
-            <ChevronDown size={12} className={`transition-transform ${accountDropOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
+
+            {/* Glowing Smooth Progress Bar */}
+            <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: dark ? "#1e293b" : "#e2e8f0" }}>
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.max(5, downloadProgress ? downloadProgress.percentage : 15)}%`,
+                  background: "linear-gradient(90deg, #10b981 0%, #06b6d4 100%)",
+                  boxShadow: "0 0 10px rgba(16,185,129,0.5)",
+                }}
+              />
+            </div>
           </div>
+        )}
 
-          {/* Account Dropdown List */}
-          {accountDropOpen && (
+        <div className="flex flex-wrap items-center justify-between px-6 py-3 gap-4">
+          {/* Left: Account Selector Card & Dropdown Menu */}
+          <div className="relative" ref={accDropRef}>
             <div
-              className="absolute bottom-full mb-2 left-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border w-64"
-              style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}
+              onClick={() => setAccountDropOpen(!accountDropOpen)}
+              className="flex items-center gap-3 px-3.5 py-2 rounded-xl cursor-pointer transition-all hover:scale-[1.01] border shadow-sm"
+              style={{ background: btnBg, borderColor: border, minWidth: 170 }}
             >
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
-                <span>Select User Account</span>
-                <span className="text-emerald-500 font-extrabold">{accountsList.length} saved</span>
-              </div>
+              {account?.account_type === "Microsoft" ? (
+                <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center flex-shrink-0 shadow-sm border border-slate-700/50">
+                  <MicrosoftIcon size={15} />
+                </div>
+              ) : (
+                <OfflineAvatarIcon size={32} />
+              )}
 
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {accountsList.map((accItem) => {
-                  const isCurrent = account?.uuid === accItem.uuid;
-                  return (
-                    <button
-                      key={accItem.uuid}
-                      onClick={() => {
-                        setAccount(accItem);
-                        setAccountDropOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors ${
-                        isCurrent ? "bg-emerald-500/15 font-bold" : "hover:bg-slate-500/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {accItem.account_type === "Microsoft" ? (
-                          <MicrosoftIcon size={14} />
-                        ) : (
-                          <OfflineAvatarIcon size={20} />
-                        )}
-                        <div className="text-left min-w-0">
-                          <div className="font-bold text-xs truncate" style={{ color: titleText }}>{accItem.username}</div>
-                          <div className="text-[9px] font-semibold" style={{ color: accItem.account_type === "Microsoft" ? "#00A4EF" : "#10b981" }}>
-                            {accItem.account_type}
-                          </div>
-                        </div>
-                      </div>
-
-                      {isCurrent && <Check size={14} className="text-emerald-500 flex-shrink-0" />}
-                    </button>
-                  );
-                })}
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-xs truncate" style={{ color: titleText }}>{account?.username || "Steve"}</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] text-emerald-500 font-bold">{account?.account_type || "Offline"}</span>
+                </div>
               </div>
-
-              <div className="pt-1.5 border-t mt-1" style={{ borderColor: border }}>
-                <button
-                  onClick={() => {
-                    setActiveTab("account");
-                    setAccountDropOpen(false);
-                  }}
-                  className="w-full py-1.5 px-2 rounded-lg text-center text-[10px] font-bold text-emerald-500 hover:bg-emerald-500/10 transition-colors"
-                >
-                  Manage Accounts...
-                </button>
-              </div>
+              <ChevronDown size={12} className={`transition-transform ${accountDropOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
             </div>
-          )}
-        </div>
 
-        {/* Center: Version Selector Dropdown — CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ */}
-        <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
-          <div className="relative flex-1">
-            <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
-              <LoaderBadge loader={selectedVersion.loader} />
-              <div className="flex-1 text-left min-w-0">
-                <div className="font-bold text-xs truncate" style={{ color: titleText }}>{selectedVersion.label}</div>
-                <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{selectedVersion.sub}</div>
-              </div>
-              <ChevronDown size={13} className={`transition-transform ${versionOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
-            </button>
-
-            {versionOpen && (
-              <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border max-h-60 overflow-y-auto" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
+            {/* Account Dropdown List */}
+            {accountDropOpen && (
+              <div
+                className="absolute bottom-full mb-2 left-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border w-64"
+                style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}
+              >
                 <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
-                  <span>Installed Versions (Thực Tế)</span>
-                  <span className="text-emerald-500 font-extrabold">{installedVersionsForDropdown.length} đã tải</span>
+                  <span>Select User Account</span>
+                  <span className="text-emerald-500 font-extrabold">{accountsList.length} saved</span>
                 </div>
 
-                {installedVersionsForDropdown.length > 0 ? (
-                  installedVersionsForDropdown.map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => { setSelectedVersion(v); setVersionOpen(false); }}
-                      className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs text-left transition-colors mb-0.5 ${
-                        selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"
-                      }`}
-                      style={{ color: titleText }}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <LoaderBadge loader={v.loader} />
-                        <div className="min-w-0">
-                          <div className="font-bold truncate">{v.label}</div>
-                          <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{v.sub}</div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {accountsList.map((accItem) => {
+                    const isCurrent = account?.uuid === accItem.uuid;
+                    return (
+                      <button
+                        key={accItem.uuid}
+                        onClick={() => {
+                          setAccount(accItem);
+                          setAccountDropOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors ${
+                          isCurrent ? "bg-emerald-500/15 font-bold" : "hover:bg-slate-500/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {accItem.account_type === "Microsoft" ? (
+                            <MicrosoftIcon size={14} />
+                          ) : (
+                            <OfflineAvatarIcon size={20} />
+                          )}
+                          <div className="text-left min-w-0">
+                            <div className="font-bold text-xs truncate" style={{ color: titleText }}>{accItem.username}</div>
+                            <div className="text-[9px] font-semibold" style={{ color: accItem.account_type === "Microsoft" ? "#00A4EF" : "#10b981" }}>
+                              {accItem.account_type}
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-500 text-white flex-shrink-0">INSTALLED</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="p-4 text-center space-y-2">
-                    <p className="text-xs font-bold text-amber-500">Chưa có phiên bản nào được tải về máy!</p>
-                    <button
-                      onClick={() => {
-                        setActiveTab("versions");
-                        setVersionOpen(false);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs"
-                    >
-                      Sang Tab Versions Tải Ngay
-                    </button>
-                  </div>
-                )}
+                        {isCurrent && <Check size={14} className="text-emerald-500 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-1.5 border-t mt-1" style={{ borderColor: border }}>
+                  <button
+                    onClick={() => {
+                      setActiveTab("account");
+                      setAccountDropOpen(false);
+                    }}
+                    className="w-full py-1.5 px-2 rounded-lg text-center text-[10px] font-bold text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+                  >
+                    Manage Accounts...
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Button Xem Tất Cả Phiên Bản (Dẫn Sang Tab Versions) */}
-          <button
-            onClick={() => setActiveTab("versions")}
-            className="h-9 px-3 rounded-xl flex items-center gap-1.5 transition-all hover:scale-105 border shadow-sm text-xs font-bold"
-            style={{ background: btnBg, borderColor: border, color: titleText }}
-            title="Xem danh sách tất cả các phiên bản"
-          >
-            <ListFilter size={14} className="text-emerald-500" />
-            <span className="hidden md:inline">Versions</span>
-          </button>
-        </div>
+          {/* Center: Version Selector Dropdown — CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ */}
+          <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
+            <div className="relative flex-1">
+              <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
+                <LoaderBadge loader={selectedVersion.loader} />
+                <div className="flex-1 text-left min-w-0">
+                  <div className="font-bold text-xs truncate" style={{ color: titleText }}>{selectedVersion.label}</div>
+                  <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{selectedVersion.sub}</div>
+                </div>
+                <ChevronDown size={13} className={`transition-transform ${versionOpen ? "rotate-180" : ""}`} style={{ color: subText }} />
+              </button>
 
-        {/* Right: Folder Action & PLAY Button */}
-        <div className="flex items-center gap-2.5">
-          <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
-            <Folder size={14} />
-          </button>
+              {versionOpen && (
+                <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border max-h-60 overflow-y-auto" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
+                    <span>Installed Versions (Thực Tế)</span>
+                    <span className="text-emerald-500 font-extrabold">{installedVersionsForDropdown.length} đã tải</span>
+                  </div>
 
-          {/* PLAY Button */}
-          <button disabled={isLaunching} onClick={handlePlay} className="flex items-center gap-3 px-7 rounded-xl font-bold transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white" style={{ height: 46, background: "linear-gradient(135deg,#10b981 0%,#059669 50%,#047857 100%)", boxShadow: "0 0 28px rgba(16,185,129,0.5), 0 4px 14px rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.2)" }}>
-            {isLaunching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play size={18} fill="currentColor" />}
-            <div>
-              <div className="text-base font-extrabold tracking-wider leading-none">PLAY</div>
-              <div className="text-[8px] tracking-[0.15em] opacity-80 uppercase leading-none mt-0.5 font-medium">{isLaunching ? "Launching..." : "ENTER THE GAME"}</div>
+                  {installedVersionsForDropdown.length > 0 ? (
+                    installedVersionsForDropdown.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => { setSelectedVersion(v); setVersionOpen(false); }}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs text-left transition-colors mb-0.5 ${
+                          selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"
+                        }`}
+                        style={{ color: titleText }}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <LoaderBadge loader={v.loader} />
+                          <div className="min-w-0">
+                            <div className="font-bold truncate">{v.label}</div>
+                            <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{v.sub}</div>
+                          </div>
+                        </div>
+
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-500 text-white flex-shrink-0">INSTALLED</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center space-y-2">
+                      <p className="text-xs font-bold text-amber-500">Chưa có phiên bản nào được tải về máy!</p>
+                      <button
+                        onClick={() => {
+                          setActiveTab("versions");
+                          setVersionOpen(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs"
+                      >
+                        Sang Tab Versions Tải Ngay
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </button>
+
+            {/* Button Xem Tất Cả Phiên Bản (Dẫn Sang Tab Versions) */}
+            <button
+              onClick={() => setActiveTab("versions")}
+              className="h-9 px-3 rounded-xl flex items-center gap-1.5 transition-all hover:scale-105 border shadow-sm text-xs font-bold"
+              style={{ background: btnBg, borderColor: border, color: titleText }}
+              title="Xem danh sách tất cả các phiên bản"
+            >
+              <ListFilter size={14} className="text-emerald-500" />
+              <span className="hidden md:inline">Versions</span>
+            </button>
+          </div>
+
+          {/* Right: Folder Action & PLAY / STOP Button */}
+          <div className="flex items-center gap-2.5">
+            <button onClick={handleOpenFolder} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:scale-105 border shadow-sm" style={{ background: btnBg, borderColor: border, color: subText }} title="Open .minecraft">
+              <Folder size={14} />
+            </button>
+
+            {/* PLAY / STOP Button */}
+            {isBusyDownloadingOrLaunching ? (
+              <button
+                onClick={handleStopLaunchOrDownload}
+                className="flex items-center gap-3 px-7 rounded-xl font-bold transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white shadow-lg"
+                style={{
+                  height: 46,
+                  background: "linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%)",
+                  boxShadow: "0 0 24px rgba(239,68,68,0.5), 0 4px 14px rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                }}
+                title="Bấm để HỦY TẢI / STOP ngay lập tức"
+              >
+                <Square size={18} fill="currentColor" />
+                <div className="text-left">
+                  <div className="text-base font-extrabold tracking-wider leading-none">STOP</div>
+                  <div className="text-[8px] tracking-[0.15em] opacity-90 uppercase leading-none mt-0.5 font-medium">HỦY TẢI NGAY</div>
+                </div>
+              </button>
+            ) : (
+              <button
+                onClick={handlePlay}
+                className="flex items-center gap-3 px-7 rounded-xl font-bold transition-all duration-150 hover:scale-[1.03] active:scale-95 text-white"
+                style={{
+                  height: 46,
+                  background: "linear-gradient(135deg,#10b981 0%,#059669 50%,#047857 100%)",
+                  boxShadow: "0 0 28px rgba(16,185,129,0.5), 0 4px 14px rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                }}
+              >
+                <Play size={18} fill="currentColor" />
+                <div className="text-left">
+                  <div className="text-base font-extrabold tracking-wider leading-none">PLAY</div>
+                  <div className="text-[8px] tracking-[0.15em] opacity-80 uppercase leading-none mt-0.5 font-medium">ENTER THE GAME</div>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
       </footer>
     </div>

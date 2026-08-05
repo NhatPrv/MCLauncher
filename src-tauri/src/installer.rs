@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use zip::ZipArchive;
-use crate::downloader::verify_and_download_file;
+use crate::downloader::{verify_and_download_file, download_file_with_progress};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ModLoaderType {
@@ -42,18 +42,19 @@ struct VersionPackageJson {
     libraries: Option<Vec<LibraryItem>>,
 }
 
-/// Tự động tải Portable JRE 21 về thư mục .minecraft/runtime/java-runtime-21 nếu máy chưa có
-pub async fn ensure_portable_java21(game_dir: &str) -> Result<String, String> {
+/// Tự động tải Portable JRE 21 về thư mục .minecraft/runtime/java-runtime-21 với tiến trình thời gian thực
+pub async fn ensure_portable_java21_with_app<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    game_dir: &str,
+) -> Result<String, String> {
     let base_path = PathBuf::from(game_dir);
     let runtime_dir = base_path.join("runtime").join("java-runtime-21");
     let java_exe = runtime_dir.join("bin").join("java.exe");
 
-    // Nếu đã có Portable Java 21 từ trước -> trả về ngay
     if java_exe.exists() {
         return Ok(java_exe.to_string_lossy().to_string());
     }
 
-    // Nếu trong runtime_dir có thư mục con chứa bin/java.exe
     if runtime_dir.exists() {
         if let Ok(entries) = fs::read_dir(&runtime_dir) {
             for entry in entries.flatten() {
@@ -68,13 +69,11 @@ pub async fn ensure_portable_java21(game_dir: &str) -> Result<String, String> {
     fs::create_dir_all(&runtime_dir).map_err(|e| e.to_string())?;
     let zip_path = base_path.join("runtime").join("jre21.zip");
 
-    // URL tải OpenJDK 21 JRE Portable x64 (Temurin 21)
     let jre_url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jre_x64_windows_hotspot_21.0.4_7.zip";
     
-    // Tải tệp zip JRE 21
-    verify_and_download_file(jre_url, &zip_path, None).await?;
+    // Tải với tiến trình hiển thị cho người dùng
+    download_file_with_progress(app_handle, jre_url, &zip_path, "Portable JRE 21").await?;
 
-    // Giải nén Zip
     if let Ok(file) = File::open(&zip_path) {
         if let Ok(mut archive) = ZipArchive::new(file) {
             for i in 0..archive.len() {
@@ -100,10 +99,8 @@ pub async fn ensure_portable_java21(game_dir: &str) -> Result<String, String> {
         }
     }
 
-    // Xóa file zip tạm sau khi giải nén
     let _ = fs::remove_file(&zip_path);
 
-    // Kiểm tra lại vị trí file java.exe sau giải nén
     if java_exe.exists() {
         return Ok(java_exe.to_string_lossy().to_string());
     }
@@ -120,7 +117,75 @@ pub async fn ensure_portable_java21(game_dir: &str) -> Result<String, String> {
     Err("Giải nén Portable JRE 21 thất bại!".to_string())
 }
 
-/// Lấy danh sách các phiên bản thực sự đã được tải về đĩa cứng (không hardcode/mock)
+pub async fn ensure_portable_java21(game_dir: &str) -> Result<String, String> {
+    let base_path = PathBuf::from(game_dir);
+    let runtime_dir = base_path.join("runtime").join("java-runtime-21");
+    let java_exe = runtime_dir.join("bin").join("java.exe");
+
+    if java_exe.exists() {
+        return Ok(java_exe.to_string_lossy().to_string());
+    }
+
+    if runtime_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&runtime_dir) {
+            for entry in entries.flatten() {
+                let sub_exe = entry.path().join("bin").join("java.exe");
+                if sub_exe.exists() {
+                    return Ok(sub_exe.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    fs::create_dir_all(&runtime_dir).map_err(|e| e.to_string())?;
+    let zip_path = base_path.join("runtime").join("jre21.zip");
+    let jre_url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jre_x64_windows_hotspot_21.0.4_7.zip";
+    
+    verify_and_download_file(jre_url, &zip_path, None).await?;
+
+    if let Ok(file) = File::open(&zip_path) {
+        if let Ok(mut archive) = ZipArchive::new(file) {
+            for i in 0..archive.len() {
+                if let Ok(mut file) = archive.by_index(i) {
+                    let outpath = match file.enclosed_name() {
+                        Some(path) => runtime_dir.join(path),
+                        None => continue,
+                    };
+
+                    if file.name().ends_with('/') {
+                        fs::create_dir_all(&outpath).ok();
+                    } else {
+                        if let Some(p) = outpath.parent() {
+                            if !p.exists() {
+                                fs::create_dir_all(p).ok();
+                            }
+                        }
+                        let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+                        std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = fs::remove_file(&zip_path);
+
+    if java_exe.exists() {
+        return Ok(java_exe.to_string_lossy().to_string());
+    }
+
+    if let Ok(entries) = fs::read_dir(&runtime_dir) {
+        for entry in entries.flatten() {
+            let sub_exe = entry.path().join("bin").join("java.exe");
+            if sub_exe.exists() {
+                return Ok(sub_exe.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    Err("Giải nén Portable JRE 21 thất bại!".to_string())
+}
+
 pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
     let versions_dir = PathBuf::from(game_dir).join("versions");
     let mut installed = Vec::new();
@@ -142,7 +207,6 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
     installed
 }
 
-/// Đảm bảo file {version}.jar, {version}.json và toàn bộ Libraries thực tế đã được tải về
 pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Result<(), String> {
     let base_path = PathBuf::from(game_dir);
     let version_dir = base_path.join("versions").join(game_version);
