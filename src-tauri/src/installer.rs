@@ -33,13 +33,34 @@ struct LibraryDownloads {
 #[derive(Deserialize)]
 struct LibraryItem {
     downloads: Option<LibraryDownloads>,
-    name: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct VersionPackageJson {
     downloads: VersionJsonDownload,
     libraries: Option<Vec<LibraryItem>>,
+}
+
+/// Lấy danh sách các phiên bản thực sự đã được tải về đĩa cứng (không hardcode/mock)
+pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
+    let versions_dir = PathBuf::from(game_dir).join("versions");
+    let mut installed = Vec::new();
+
+    if versions_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&versions_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    let jar_path = entry.path().join(format!("{}.jar", folder_name));
+                    let json_path = entry.path().join(format!("{}.json", folder_name));
+                    if jar_path.exists() || json_path.exists() {
+                        installed.push(folder_name);
+                    }
+                }
+            }
+        }
+    }
+    installed
 }
 
 /// Đảm bảo file {version}.jar, {version}.json và toàn bộ Libraries thực tế đã được tải về
@@ -92,7 +113,6 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
                     if let Some(downloads) = lib.downloads {
                         if let Some(artifact) = downloads.artifact {
                             let lib_url = artifact.url;
-                            // Tính toán relative path từ URL
                             if let Ok(url_parsed) = reqwest::Url::parse(&lib_url) {
                                 let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
                                 if path_segments.len() > 1 {
@@ -121,7 +141,6 @@ pub async fn install_mod_loader(
     loader_type: ModLoaderType,
     loader_version: &str,
 ) -> Result<String, String> {
-    // Luôn đảm bảo Vanilla version đã tồn tại trước
     ensure_vanilla_version(game_dir, game_version).await?;
 
     let base_path = PathBuf::from(game_dir);

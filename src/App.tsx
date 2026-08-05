@@ -151,7 +151,7 @@ function formatDownloads(num: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — CLEANED UP OLD SETTINGS BUTTONS
+   MAIN COMPONENT — REAL DISK INSTALLED VERSIONS (NO MOCK/HARDCODE)
 ═══════════════════════════════════════════════════════════════════════════ */
 export function App() {
   const [dark, setDark]                       = useState(true);
@@ -163,10 +163,11 @@ export function App() {
   const [isSavingConfig, setIsSavingConfig]   = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
 
-  // Live Fetched Versions State
+  // Live Fetched Versions State & Real Disk Installed State
   const [fetchedVersionsList, setFetchedVersionsList] = useState<VersionItem[]>([]);
+  const [installedDiskVersionIds, setInstalledDiskVersionIds] = useState<string[]>([]);
   const [selectedVersion, setSelectedVersion]         = useState<VersionItem>({
-    id: "1.21.1", label: "1.21.1", sub: "Tricky Trials", loader: "vanilla", versionStr: "1.21.1", isInstalled: true
+    id: "1.21.1", label: "1.21.1", sub: "Tricky Trials", loader: "vanilla", versionStr: "1.21.1", isInstalled: false
   });
   const [versionTabLoader, setVersionTabLoader]     = useState<LoaderType>("vanilla");
   const [isLoadingVersions, setIsLoadingVersions]   = useState(false);
@@ -204,62 +205,71 @@ export function App() {
     theme: "dark",
   });
 
-  /* ── Fetch Real Minecraft Game Versions ── */
+  /* ── 1. Quét Danh Sách Phiên Bản Thực Sự Đã Tải Trên Đĩa Cứng ── */
+  const refreshInstalledVersionsFromDisk = useCallback(async (gameDir: string) => {
+    try {
+      const realInstalledIds = await invoke<string[]>("get_installed_versions_cmd", { gameDir });
+      setInstalledDiskVersionIds(realInstalledIds || []);
+      return realInstalledIds || [];
+    } catch (err) {
+      console.error("Lỗi quét phiên bản đã tải từ đĩa cứng:", err);
+      return [];
+    }
+  }, []);
+
+  /* ── 2. Fetch Real Game Versions ── */
   const fetchRealGameVersions = useCallback(async () => {
     setIsLoadingVersions(true);
     try {
+      // Quét ổ đĩa xem bản nào thực sự đã cài
+      const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
+
       const res = await fetch("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json");
       if (res.ok) {
         const data = await res.json();
         const releaseEntries = (data.versions || []).filter((v: any) => v.type === "release");
 
-        // Vanilla & OptiFine Standalone
+        // Vanilla & OptiFine Standalone (KHÔNG MOCK, isInstalled kiểm tra từ realDiskIds)
         const vanillaList: VersionItem[] = releaseEntries.map((v: any) => ({
           id: v.id,
           label: v.id,
           sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
           loader: "vanilla" as LoaderType,
           versionStr: v.id,
-          isInstalled: v.id === "1.21.1" || v.id === "1.20.1" || v.id === "1.19.4",
+          isInstalled: realDiskIds.includes(v.id),
           releaseDate: v.releaseTime,
         }));
 
-        // OptiFine Standalone thuộc Vanilla
         const optifineStandalone: VersionItem[] = [
-          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: true },
-          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: false },
+          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-optifine-hd") },
+          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-optifine-hd") },
         ];
 
-        // Fabric Loader
         const fabricVariants: VersionItem[] = [
-          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: true },
-          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: false },
-          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: false },
+          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-fabric") },
+          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-fabric") },
+          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-fabric") },
         ];
 
-        // Forge & OptiForge Combo
         const forgeVariants: VersionItem[] = [
-          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: true },
-          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: true },
-          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: false },
+          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: realDiskIds.includes("1.20.4-forge") },
+          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-forge-opti") },
+          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: realDiskIds.includes("1.16.5-forge") },
         ];
 
-        // NeoForge
         const neoforgeVariants: VersionItem[] = [
-          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: true },
-          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: false },
+          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-neoforge") },
+          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: realDiskIds.includes("1.20.4-neoforge") },
         ];
 
-        // Quilt Loader
         const quiltVariants: VersionItem[] = [
-          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: false },
-          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: false },
+          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-quilt") },
+          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: realDiskIds.includes("1.19.4-quilt") },
         ];
 
-        // Iris Shaders Loader
         const irisVariants: VersionItem[] = [
-          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: true },
-          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: false },
+          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: realDiskIds.includes("1.21.1-iris") },
+          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: realDiskIds.includes("1.20.1-iris") },
         ];
 
         const fullList = [
@@ -273,7 +283,12 @@ export function App() {
         ];
 
         setFetchedVersionsList(fullList);
-        if (fullList.length > 0 && !selectedVersion) {
+
+        // Tự động chọn bản đã cài thực sự đầu tiên
+        const firstInstalled = fullList.find((v) => v.isInstalled);
+        if (firstInstalled) {
+          setSelectedVersion(firstInstalled);
+        } else if (fullList.length > 0) {
           setSelectedVersion(fullList[0]);
         }
       }
@@ -282,7 +297,7 @@ export function App() {
     } finally {
       setIsLoadingVersions(false);
     }
-  }, [selectedVersion]);
+  }, [config.game_dir, refreshInstalledVersionsFromDisk]);
 
   useEffect(() => {
     fetchRealGameVersions();
@@ -408,7 +423,7 @@ export function App() {
 
   const handleOpenFolder = () => { invoke("plugin:opener|open_path", { path: config.game_dir }).catch(() => alert(`Game dir: ${config.game_dir}`)); };
 
-  // Install / Download Version Handler
+  // Install / Download Real Version Handler
   const handleInstallVersion = async (targetVer: VersionItem) => {
     setInstallingVersionId(targetVer.id);
     try {
@@ -419,10 +434,20 @@ export function App() {
           loaderName: targetVer.loader,
           loaderVersion: "latest",
         });
+      } else {
+        await invoke("install_mod_loader_cmd", {
+          gameDir: config.game_dir,
+          gameVersion: targetVer.versionStr,
+          loaderName: "vanilla",
+          loaderVersion: "latest",
+        });
       }
-      // Update local installed state
+
+      // Quét lại đĩa cứng thực tế
+      const realDiskIds = await refreshInstalledVersionsFromDisk(config.game_dir);
+
       setFetchedVersionsList((prev) =>
-        prev.map((v) => (v.id === targetVer.id ? { ...v, isInstalled: true } : v))
+        prev.map((v) => (v.id === targetVer.id || realDiskIds.includes(v.id) ? { ...v, isInstalled: true } : v))
       );
       setSelectedVersion({ ...targetVer, isInstalled: true });
     } catch (err: any) {
@@ -433,7 +458,7 @@ export function App() {
   };
 
   // Uninstall / Remove Version Handler
-  const handleUninstallVersion = (targetVer: VersionItem) => {
+  const handleUninstallVersion = async (targetVer: VersionItem) => {
     if (confirm(`Bạn có chắc chắn muốn gỡ phiên bản ${targetVer.label} khỏi máy không?`)) {
       setFetchedVersionsList((prev) =>
         prev.map((v) => (v.id === targetVer.id ? { ...v, isInstalled: false } : v))
@@ -441,6 +466,7 @@ export function App() {
       if (selectedVersion.id === targetVer.id) {
         setSelectedVersion({ ...targetVer, isInstalled: false });
       }
+      await refreshInstalledVersionsFromDisk(config.game_dir);
     }
   };
 
@@ -505,6 +531,11 @@ export function App() {
                           v.sub.toLowerCase().includes(versionSearchQuery.toLowerCase());
     return matchesLoader && matchesSearch;
   });
+
+  // Dropdown list CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ TRÊN ĐĨA CỨNG
+  const installedVersionsForDropdown = fetchedVersionsList.filter(
+    (v) => v.isInstalled || installedDiskVersionIds.includes(v.id)
+  );
 
   /* ── Dynamic Contrast Color Tokens */
   const border       = dark ? "#334155" : "#cbd5e1";
@@ -572,7 +603,7 @@ export function App() {
           ))}
         </div>
 
-        {/* Right Theme Switcher (Chỉ Giữ Nút Dark/Light Mode) */}
+        {/* Right Theme Switcher */}
         <div className="flex items-center gap-2">
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:scale-105" style={{ background: btnBg, color: subText }}>
             {dark ? <Moon size={12} className="text-amber-400" /> : <Sun size={12} className="text-amber-500" />}
@@ -730,7 +761,7 @@ export function App() {
                   </span>
                 </div>
                 <p className="text-xs font-medium mt-1" style={{ color: subText }}>
-                  Danh sách phiên bản sắp xếp theo từng hàng ngăn nắp. Bạn có thể bấm nút Tải về hoặc Gỡ phiên bản trực tiếp.
+                  Danh sách phiên bản sắp xếp theo từng hàng ngăn nắp. Chỉ những phiên bản có dữ liệu thực sự trên đĩa cứng mới hiển thị nhãn Đã Tải.
                 </p>
               </div>
 
@@ -776,7 +807,7 @@ export function App() {
             {isLoadingVersions ? (
               <div className="py-16 text-center space-y-3">
                 <Loader2 size={32} className="animate-spin text-emerald-500 mx-auto" />
-                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải danh sách phiên bản chính thức từ Mojang API...</p>
+                <p className="text-xs font-bold" style={{ color: subText }}>Đang tải danh sách phiên bản chính thức từ Mojang API & quét đĩa cứng...</p>
               </div>
             ) : filteredVersionsTab.length > 0 ? (
               <div className="space-y-3">
@@ -1443,7 +1474,7 @@ export function App() {
           )}
         </div>
 
-        {/* Center: Version Selector Dropdown & Open Versions Tab Button */}
+        {/* Center: Version Selector Dropdown — CHỈ HIỂN THỊ CÁC PHIÊN BẢN ĐÃ TẢI THỰC SỰ */}
         <div className="flex items-center gap-2 flex-1 max-w-md" ref={dropRef}>
           <div className="relative flex-1">
             <button onClick={() => setVersionOpen(!versionOpen)} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs transition-all hover:scale-[1.01] border shadow-sm" style={{ background: btnBg, borderColor: border }}>
@@ -1457,28 +1488,46 @@ export function App() {
 
             {versionOpen && (
               <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden p-1.5 shadow-2xl z-50 backdrop-blur-xl border max-h-60 overflow-y-auto" style={{ background: dark ? "#18181b" : "#ffffff", borderColor: border }}>
-                {fetchedVersionsList.slice(0, 15).map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => { setSelectedVersion(v); setVersionOpen(false); }}
-                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs text-left transition-colors mb-0.5 ${
-                      selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"
-                    }`}
-                    style={{ color: titleText }}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <LoaderBadge loader={v.loader} />
-                      <div className="min-w-0">
-                        <div className="font-bold truncate">{v.label}</div>
-                        <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{v.sub}</div>
-                      </div>
-                    </div>
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style={{ color: subText, borderColor: border }}>
+                  <span>Installed Versions (Thực Tế)</span>
+                  <span className="text-emerald-500 font-extrabold">{installedVersionsForDropdown.length} đã tải</span>
+                </div>
 
-                    {v.isInstalled && (
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-500 text-white">INSTALLED</span>
-                    )}
-                  </button>
-                ))}
+                {installedVersionsForDropdown.length > 0 ? (
+                  installedVersionsForDropdown.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => { setSelectedVersion(v); setVersionOpen(false); }}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs text-left transition-colors mb-0.5 ${
+                        selectedVersion.id === v.id ? "bg-emerald-500/15 text-emerald-500 font-bold" : "hover:bg-slate-500/10"
+                      }`}
+                      style={{ color: titleText }}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <LoaderBadge loader={v.loader} />
+                        <div className="min-w-0">
+                          <div className="font-bold truncate">{v.label}</div>
+                          <div className="text-[9px] font-medium truncate" style={{ color: subText }}>{v.sub}</div>
+                        </div>
+                      </div>
+
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-500 text-white flex-shrink-0">INSTALLED</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 text-center space-y-2">
+                    <p className="text-xs font-bold text-amber-500">Chưa có phiên bản nào được tải về máy!</p>
+                    <button
+                      onClick={() => {
+                        setActiveTab("versions");
+                        setVersionOpen(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs"
+                    >
+                      Sang Tab Versions Tải Ngay
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

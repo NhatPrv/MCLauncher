@@ -8,7 +8,7 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader};
+use installer::{ModLoaderType, install_mod_loader, get_installed_versions};
 use launcher::launch_game;
 
 #[tauri::command]
@@ -57,6 +57,11 @@ async fn get_quilt_versions(game_version: String) -> Result<Vec<String>, String>
 }
 
 #[tauri::command]
+fn get_installed_versions_cmd(game_dir: String) -> Vec<String> {
+    get_installed_versions(&game_dir)
+}
+
+#[tauri::command]
 async fn install_mod_loader_cmd(
     game_dir: String,
     game_version: String,
@@ -94,6 +99,7 @@ pub fn run() {
             get_fabric_versions,
             get_forge_versions,
             get_quilt_versions,
+            get_installed_versions_cmd,
             install_mod_loader_cmd,
             launch_minecraft
         ])
