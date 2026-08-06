@@ -74,6 +74,7 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
 type Tab = "home" | "versions" | "mods" | "account" | "settings";
 type LoaderType = "vanilla" | "fabric" | "forge" | "neoforge" | "quilt" | "iris";
 type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
+type VersionSubTab = "downloaded" | LoaderType;
 
 interface VersionItem {
   id: string;
@@ -199,7 +200,7 @@ export function App() {
   const [selectedVersion, setSelectedVersion]         = useState<VersionItem>({
     id: "1.21.1", label: "1.21.1", sub: "Tricky Trials", loader: "vanilla", versionStr: "1.21.1", isInstalled: false
   });
-  const [versionTabLoader, setVersionTabLoader]     = useState<LoaderType>("vanilla");
+  const [versionTabLoader, setVersionTabLoader]     = useState<VersionSubTab>("downloaded");
   const [isLoadingVersions, setIsLoadingVersions]   = useState(false);
   const [versionSearchQuery, setVersionSearchQuery] = useState("");
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
@@ -655,12 +656,46 @@ export function App() {
     }
   };
 
-  const filteredVersionsTab = fetchedVersionsList.filter((v) => {
-    const matchesLoader = v.loader === versionTabLoader;
-    const matchesSearch = v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
-                          v.sub.toLowerCase().includes(versionSearchQuery.toLowerCase());
-    return matchesLoader && matchesSearch;
-  });
+  // Thuật toán so sánh & sắp xếp phiên bản:
+  // 1. Phiên bản game mới nhất lên trên (VD: 1.21.1 > 1.20.1 > 1.19.4)
+  // 2. Cùng phiên bản game -> Xếp Alphabet theo tên Mod Loader (A - Z)
+  const compareVersions = (a: VersionItem, b: VersionItem): number => {
+    const parseVer = (vStr: string) => {
+      return vStr
+        .replace(/^mc/i, "")
+        .split(".")
+        .map((n) => parseInt(n, 10) || 0);
+    };
+
+    const verA = parseVer(a.versionStr);
+    const verB = parseVer(b.versionStr);
+
+    const maxLen = Math.max(verA.length, verB.length);
+    for (let i = 0; i < maxLen; i++) {
+      const numA = verA[i] || 0;
+      const numB = verB[i] || 0;
+      if (numA !== numB) {
+        return numB - numA; // Giảm dần: phiên bản mới nhất đứng trước
+      }
+    }
+
+    const loaderLabelA = LOADER_META[a.loader]?.label || a.loader;
+    const loaderLabelB = LOADER_META[b.loader]?.label || b.loader;
+    return loaderLabelA.localeCompare(loaderLabelB);
+  };
+
+  const filteredVersionsTab = fetchedVersionsList
+    .filter((v) => {
+      const matchesTab =
+        versionTabLoader === "downloaded"
+          ? v.isInstalled
+          : v.loader === versionTabLoader;
+      const matchesSearch =
+        v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
+        v.sub.toLowerCase().includes(versionSearchQuery.toLowerCase());
+      return matchesTab && matchesSearch;
+    })
+    .sort(compareVersions);
 
   /* ── Map 100% STRICTLY from Disk Folder List (installedDiskVersionIds) ── */
   const installedVersionsForDropdown = installedDiskVersionIds.map((diskFolder) => {
@@ -931,25 +966,33 @@ export function App() {
               </div>
             </div>
 
+            {/* Sub-tabs / Loader Category Filter Chips + Downloaded Subtab */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-              {(["vanilla", "fabric", "forge", "neoforge", "quilt", "iris"] as LoaderType[]).map((loaderKey) => {
-                const meta = LOADER_META[loaderKey];
-                const isActive = versionTabLoader === loaderKey;
+              {([
+                { id: "downloaded", emoji: "💾", color: "#10b981", bg: "rgba(16,185,129,0.15)", label: "Downloaded" },
+                { id: "vanilla",  ...LOADER_META.vanilla },
+                { id: "fabric",   ...LOADER_META.fabric },
+                { id: "forge",    ...LOADER_META.forge },
+                { id: "neoforge", ...LOADER_META.neoforge },
+                { id: "quilt",    ...LOADER_META.quilt },
+                { id: "iris",     ...LOADER_META.iris },
+              ] as { id: VersionSubTab; emoji: string; color: string; bg: string; label: string }[]).map((tabItem) => {
+                const isActive = versionTabLoader === tabItem.id;
                 return (
                   <button
-                    key={loaderKey}
-                    onClick={() => setVersionTabLoader(loaderKey)}
+                    key={tabItem.id}
+                    onClick={() => setVersionTabLoader(tabItem.id)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex-shrink-0 border ${
                       isActive ? "shadow-md scale-[1.02]" : "hover:scale-[1.01]"
                     }`}
                     style={{
-                      background: isActive ? meta.bg : btnBg,
-                      borderColor: isActive ? meta.color : border,
-                      color: isActive ? meta.color : titleText,
+                      background: isActive ? tabItem.bg : btnBg,
+                      borderColor: isActive ? tabItem.color : border,
+                      color: isActive ? tabItem.color : titleText,
                     }}
                   >
-                    <span>{meta.emoji}</span>
-                    <span>{meta.label}</span>
+                    <span>{tabItem.emoji}</span>
+                    <span>{tabItem.label}</span>
                   </button>
                 );
               })}
