@@ -332,26 +332,10 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
 
     if versions_dir.exists() {
         if let Ok(entries) = fs::read_dir(&versions_dir) {
-            let folders: Vec<String> = entries
-                .flatten()
-                .filter(|e| e.path().is_dir())
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect();
-
-            for folder in &folders {
-                let folder_path = versions_dir.join(folder);
-                let is_user_tag = folder_path.join("user_installed.tag").exists();
-
-                // Nếu là thư mục Vanilla (không chứa dấu -)
-                if !folder.contains('-') {
-                    // Chỉ hiện nếu người dùng chủ động bấm cài Vanilla (có file user_installed.tag)
-                    // HOẶC nếu không có bất kỳ bản mod loader nào gắn liền với phiên bản này
-                    let has_associated_mod = folders.iter().any(|f| f.starts_with(&format!("{}-", folder)));
-                    if is_user_tag || !has_associated_mod {
-                        installed.push(folder.clone());
-                    }
-                } else {
-                    installed.push(folder.clone());
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    installed.push(folder_name);
                 }
             }
         }

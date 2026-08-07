@@ -132,6 +132,37 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
         }
     }
 
+    // Tự động cài đặt phiên bản nếu thư mục phiên bản chưa tồn tại trên đĩa cứng
+    let game_dir_path = std::path::PathBuf::from(&final_config.game_dir);
+    let target_version_dir = game_dir_path.join("versions").join(&version_id);
+    if !target_version_dir.exists() {
+        let game_ver_str = version_id.split('-').next().unwrap_or(&version_id);
+        let loader_name = if version_id.contains("iris") {
+            "iris"
+        } else if version_id.contains("fabric") {
+            "fabric"
+        } else if version_id.contains("quilt") {
+            "quilt"
+        } else if version_id.contains("forge") {
+            "forge"
+        } else if version_id.contains("optifine") {
+            "optifine"
+        } else {
+            "vanilla"
+        };
+
+        let loader_enum = match loader_name {
+            "fabric" => ModLoaderType::Fabric,
+            "forge" => ModLoaderType::Forge,
+            "quilt" => ModLoaderType::Quilt,
+            "optifine" => ModLoaderType::OptiFine,
+            "iris" => ModLoaderType::Iris,
+            _ => ModLoaderType::Vanilla,
+        };
+
+        let _ = install_mod_loader(&final_config.game_dir, game_ver_str, loader_enum, "latest").await;
+    }
+
     let _ = ensure_vanilla_version(&final_config.game_dir, &version_id).await;
     if version_id.contains("fabric") || version_id.contains("iris") {
         let _ = ensure_fabric_loader_jar(&final_config.game_dir, "0.16.0").await;
