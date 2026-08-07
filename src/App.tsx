@@ -1668,12 +1668,12 @@ export function App() {
                   </span>
                 )}
                 {downloadProgress && downloadProgress.total_bytes > 0 && (
-                  <span style={{ color: subText }}>
-                    {formatBytes(downloadProgress.downloaded_bytes)} / {formatBytes(downloadProgress.total_bytes)}
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-500/10 border border-slate-500/20" style={{ color: titleText }}>
+                    📦 {formatBytes(downloadProgress.downloaded_bytes)} / {formatBytes(downloadProgress.total_bytes)}
                   </span>
                 )}
-                <span className="text-emerald-500 font-black text-xs">
-                  {currentPercentage.toFixed(1)}%
+                <span className="text-emerald-500 font-black text-xs px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                  {currentPercentage.toFixed(1)}% / 100%
                 </span>
               </div>
             </div>

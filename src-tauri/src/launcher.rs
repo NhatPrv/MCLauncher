@@ -225,12 +225,33 @@ pub fn launch_game(
         }
     }
 
-    jar_list.sort();
-    jar_list.dedup();
+    // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ hoàn toàn các file jar cũ như asm-tree-9.6.jar)
+    let mut artifact_map: std::collections::HashMap<String, Vec<PathBuf>> = std::collections::HashMap::new();
+    for jar_str in jar_list {
+        let p = PathBuf::from(&jar_str);
+        if let Some(parent) = p.parent() {
+            if let Some(artifact_dir) = parent.parent() {
+                let key = artifact_dir.to_string_lossy().to_string();
+                artifact_map.entry(key).or_default().push(p);
+                continue;
+            }
+        }
+        artifact_map.entry(jar_str.clone()).or_default().push(p);
+    }
+
+    let mut final_jars = Vec::new();
+    for (_key, mut paths) in artifact_map {
+        paths.sort_by(|a, b| compare_semver_paths(a, b));
+        if let Some(best) = paths.first() {
+            final_jars.push(best.to_string_lossy().to_string());
+        }
+    }
+
+    final_jars.sort();
 
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
-    let classpath = jar_list.join(cp_separator);
+    let classpath = final_jars.join(cp_separator);
 
     let mut args: Vec<String> = vec![
         min_ram_arg,
