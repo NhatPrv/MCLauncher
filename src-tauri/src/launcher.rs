@@ -216,6 +216,8 @@ pub fn launch_game(
         game_dir.join("libraries").join("io").join("netty"),
         game_dir.join("libraries").join("org").join("apache"),
         game_dir.join("libraries").join("it").join("unimi"),
+        game_dir.join("libraries").join("net").join("sf").join("jopt-simple"),
+        game_dir.join("libraries").join("org").join("joml"),
     ];
 
     for dir in extra_lib_dirs {
