@@ -109,17 +109,29 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
 }
 pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
     let libraries_dir = PathBuf::from(game_dir).join("libraries");
+
+    // Dọn dẹp thư mục version 9.6 cũ nếu có để đảm bảo duy nhất ASM 9.7.1 đồng bộ 100%
+    let old_asm_dir = libraries_dir.join("org").join("ow2").join("asm");
+    if old_asm_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&old_asm_dir) {
+            for entry in entries.flatten() {
+                if let Ok(sub_entries) = fs::read_dir(entry.path()) {
+                    for sub in sub_entries.flatten() {
+                        if sub.file_name().to_string_lossy().contains("9.6") {
+                            let _ = fs::remove_dir_all(sub.path());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let core_libs = vec![
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
         ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),
         ("org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar"),
         ("org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar"),
         ("org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar"),
-        ("org/ow2/asm/asm/9.6/asm-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.6/asm-9.6.jar"),
-        ("org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar"),
-        ("org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar"),
-        ("org/ow2/asm/asm-util/9.6/asm-util-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.6/asm-util-9.6.jar"),
-        ("org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar"),
         ("org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar"),
         ("net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar"),
         ("net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar"),

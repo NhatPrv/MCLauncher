@@ -210,8 +210,9 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp Fabric Loader & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi đầu (Không nạp org/ow2/asm để tránh LinkageError với KnotClassLoader)
+    // Nạp đồng bộ Fabric Loader, OW2 ASM 9.7.1 & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi động mượt mà
     let system_lib_dirs = vec![
+        game_dir.join("libraries").join("org").join("ow2").join("asm"),
         game_dir.join("libraries").join("org").join("spongepowered"),
         game_dir.join("libraries").join("net").join("fabricmc"),
     ];
@@ -247,9 +248,6 @@ pub fn launch_game(
     }
 
     final_jars.sort();
-
-    // Loại bỏ tất cả các thư viện OW2 ASM khỏi System Classpath (-cp) để KnotClassLoader tự quản lý trong runtime và không bao giờ bị LinkageError!
-    final_jars.retain(|jar| !jar.replace('\\', "/").contains("org/ow2/asm"));
 
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
