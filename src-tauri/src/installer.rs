@@ -214,9 +214,11 @@ pub async fn download_modrinth_mod_to_dir(
         .build()
         .map_err(|e| e.to_string())?;
 
+    let target_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+
     let url = format!(
         "https://api.modrinth.com/v2/project/{}/version?game_versions=[\"{}\"]&loaders=[\"fabric\"]",
-        slug, game_version
+        slug, target_ver
     );
 
     if let Ok(res) = client.get(&url).send().await {
@@ -707,8 +709,10 @@ pub async fn install_mod_loader(
             fs::create_dir_all(&local_mods_dir).ok();
             fs::create_dir_all(&global_mods_dir).ok();
 
+            let _ = download_modrinth_mod_to_dir(&local_mods_dir, "fabric-api", game_version).await;
             let _ = download_modrinth_mod_to_dir(&local_mods_dir, "iris", game_version).await;
             let _ = download_modrinth_mod_to_dir(&local_mods_dir, "sodium", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&global_mods_dir, "fabric-api", game_version).await;
             let _ = download_modrinth_mod_to_dir(&global_mods_dir, "iris", game_version).await;
             let _ = download_modrinth_mod_to_dir(&global_mods_dir, "sodium", game_version).await;
 
