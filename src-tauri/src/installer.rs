@@ -70,31 +70,39 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
 }
 
 pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> Result<(), String> {
-    let base_path = PathBuf::from(game_dir);
-    let target_jar = base_path
-        .join("libraries")
-        .join("net")
-        .join("fabricmc")
-        .join("fabric-loader")
-        .join(loader_version)
-        .join(format!("fabric-loader-{}.jar", loader_version));
+    let loader_vers = vec![
+        if loader_version == "latest" || loader_version.is_empty() { "0.16.10" } else { loader_version },
+        "0.16.10",
+        "0.16.0",
+    ];
 
-    if !target_jar.exists() {
-        if let Some(parent) = target_jar.parent() {
-            fs::create_dir_all(parent).ok();
-        }
+    let libraries_dir = PathBuf::from(game_dir).join("libraries");
 
-        let primary_url = format!(
-            "https://maven.fabricmc.net/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
-            loader_version, loader_version
-        );
-        let mirror_url = format!(
-            "https://bmclapi2.bangbang93.com/maven/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
-            loader_version, loader_version
-        );
+    for ver in loader_vers {
+        let target_jar = libraries_dir
+            .join("net")
+            .join("fabricmc")
+            .join("fabric-loader")
+            .join(ver)
+            .join(format!("fabric-loader-{}.jar", ver));
 
-        if verify_and_download_file(&primary_url, &target_jar, None).await.is_err() {
-            let _ = verify_and_download_file(&mirror_url, &target_jar, None).await;
+        if !target_jar.exists() {
+            if let Some(parent) = target_jar.parent() {
+                fs::create_dir_all(parent).ok();
+            }
+
+            let primary_url = format!(
+                "https://maven.fabricmc.net/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
+                ver, ver
+            );
+            let mirror_url = format!(
+                "https://bmclapi2.bangbang93.com/maven/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
+                ver, ver
+            );
+
+            if verify_and_download_file(&primary_url, &target_jar, None).await.is_err() {
+                let _ = verify_and_download_file(&mirror_url, &target_jar, None).await;
+            }
         }
     }
     Ok(())
@@ -102,6 +110,11 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
 pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
     let libraries_dir = PathBuf::from(game_dir).join("libraries");
     let core_libs = vec![
+        ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
+        ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),
+        ("org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar"),
+        ("org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar"),
+        ("org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar"),
         ("org/ow2/asm/asm/9.6/asm-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.6/asm-9.6.jar"),
         ("org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar"),
         ("org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar"),
