@@ -231,17 +231,12 @@ pub fn get_required_java_version(version_id: &str) -> u32 {
         return 21;
     }
 
-    // Các phiên bản 26.x hoặc snapshot thử nghiệm mới -> JDK 25
-    if parts[0] >= 26 || (parts.len() >= 2 && parts[0] == 1 && parts[1] >= 26) {
-        return 25;
-    }
-
     if parts.len() >= 2 && parts[0] == 1 {
         let minor = parts[1];
         let patch = parts.get(2).cloned().unwrap_or(0);
 
         if minor > 20 || (minor == 20 && patch >= 5) {
-            return 21; // 1.20.5+ -> JDK 21
+            return 21; // 1.20.5+ -> JDK 21 (LTS)
         }
         if minor >= 17 {
             return 17; // 1.17 - 1.20.4 -> JDK 17
