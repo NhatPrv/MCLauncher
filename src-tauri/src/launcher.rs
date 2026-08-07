@@ -94,20 +94,19 @@ fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
 fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<String> {
     let libraries_dir = game_dir.join("libraries");
     let mut manifest_jars = Vec::new();
-    let mut manifest_found = false;
 
     let versions_to_check = vec![
         version_id.to_string(),
         version_id.split('-').next().unwrap_or(version_id).to_string(),
     ];
 
+    // 1. Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON
     for ver in versions_to_check {
         let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
         if json_path.exists() {
             if let Ok(content) = fs::read_to_string(&json_path) {
                 if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
                     if let Some(libs) = parsed.libraries {
-                        manifest_found = true;
                         for lib_item in libs {
                             if let Some(maven_name) = lib_item.name {
                                 if let Some(rel_path) = maven_to_local_path(&maven_name) {
@@ -124,7 +123,16 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
         }
     }
 
-    if manifest_found && !manifest_jars.is_empty() {
+    // 2. Luôn tự động bổ sung các thư viện ASM cốt lõi (asm, asm-tree, asm-commons, asm-util) nếu có trong libraries
+    let asm_dir = libraries_dir.join("org").join("ow2").join("asm");
+    if asm_dir.exists() {
+        let mut asm_jars = Vec::new();
+        collect_jars_recursive(&asm_dir, &mut asm_jars);
+        manifest_jars.extend(asm_jars);
+    }
+
+    if !manifest_jars.is_empty() {
+        manifest_jars.sort();
         manifest_jars.dedup();
         return manifest_jars;
     }
