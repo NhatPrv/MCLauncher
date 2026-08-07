@@ -210,6 +210,12 @@ pub fn launch_game(
         game_dir.join("libraries").join("org").join("spongepowered"),
         game_dir.join("libraries").join("net").join("fabricmc").join("intermediary"),
         game_dir.join("libraries").join("org").join("slf4j"),
+        game_dir.join("libraries").join("org").join("lwjgl"),
+        game_dir.join("libraries").join("com").join("mojang"),
+        game_dir.join("libraries").join("com").join("google"),
+        game_dir.join("libraries").join("io").join("netty"),
+        game_dir.join("libraries").join("org").join("apache"),
+        game_dir.join("libraries").join("it").join("unimi"),
     ];
 
     for dir in extra_lib_dirs {

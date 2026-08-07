@@ -185,21 +185,26 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
     let _ = ensure_required_asm_libraries(game_dir).await;
     let base_path = PathBuf::from(game_dir);
     let libraries_dir = base_path.join("libraries");
-    let json_path = base_path.join("versions").join(version_id).join(format!("{}.json", version_id));
 
-    if json_path.exists() {
-        if let Ok(content) = fs::read_to_string(&json_path) {
-            if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
-                if let Some(libs) = parsed.libraries {
-                    for item in libs {
-                        if let Some(ref maven_name) = item.name {
-                            if let Some((url, rel_path)) = maven_to_url(maven_name) {
-                                let local_jar = libraries_dir.join(rel_path);
-                                if !local_jar.exists() {
-                                    let _ = verify_and_download_file(&url, &local_jar, None).await;
-                                    if !local_jar.exists() && url.contains("maven.fabricmc.net") {
-                                        let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
-                                        let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+    let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
+    let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string(), "1.21.1".to_string()];
+
+    for ver in versions_to_check {
+        let json_path = base_path.join("versions").join(&ver).join(format!("{}.json", ver));
+        if json_path.exists() {
+            if let Ok(content) = fs::read_to_string(&json_path) {
+                if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
+                    if let Some(libs) = parsed.libraries {
+                        for item in libs {
+                            if let Some(ref maven_name) = item.name {
+                                if let Some((url, rel_path)) = maven_to_url(maven_name) {
+                                    let local_jar = libraries_dir.join(rel_path);
+                                    if !local_jar.exists() {
+                                        let _ = verify_and_download_file(&url, &local_jar, None).await;
+                                        if !local_jar.exists() && url.contains("maven.fabricmc.net") {
+                                            let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
+                                            let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+                                        }
                                     }
                                 }
                             }
@@ -209,6 +214,7 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
             }
         }
     }
+
     Ok(())
 }
 
