@@ -247,10 +247,45 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
 }
 
 pub fn delete_installed_version(game_dir: &str, version_id: &str) -> Result<(), String> {
-    let target_dir = PathBuf::from(game_dir).join("versions").join(version_id);
-    if target_dir.exists() {
-        let _ = fs::remove_dir_all(target_dir);
+    let versions_dir = PathBuf::from(game_dir).join("versions");
+    if !versions_dir.exists() {
+        return Ok(());
     }
+
+    let mut deleted_count = 0;
+
+    // 1. Thử xóa đường dẫn trực tiếp
+    let exact_dir = versions_dir.join(version_id);
+    if exact_dir.exists() {
+        fs::remove_dir_all(&exact_dir)
+            .map_err(|e| format!("Không thể xóa thư mục '{}': {}. Vui lòng đóng game trước khi xóa!", exact_dir.display(), e))?;
+        deleted_count += 1;
+    }
+
+    // 2. Tìm kiếm các thư mục có suffix '-latest' hoặc tên mở rộng (ví dụ 1.21.1-fabric-latest)
+    if deleted_count == 0 {
+        if let Ok(entries) = fs::read_dir(&versions_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    let is_match = folder_name == version_id
+                        || folder_name == format!("{}-latest", version_id)
+                        || (version_id.contains('-') && folder_name.starts_with(version_id));
+
+                    if is_match {
+                        fs::remove_dir_all(entry.path())
+                            .map_err(|e| format!("Không thể xóa thư mục '{}': {}. Vui lòng đóng game trước khi xóa!", entry.path().display(), e))?;
+                        deleted_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if deleted_count == 0 {
+        return Err(format!("Không tìm thấy thư mục phiên bản '{}' trên đĩa cứng để xóa!", version_id));
+    }
+
     Ok(())
 }
 
