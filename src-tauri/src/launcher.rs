@@ -1,10 +1,63 @@
 use std::process::Command as SysCommand;
 use std::path::{Path, PathBuf};
 use std::fs;
+use std::collections::HashMap;
 use crate::config::{AppConfig, detect_java_path};
 use crate::auth::Account;
 
-use std::collections::HashMap;
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct LibraryNameItem {
+    name: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct VersionManifestJson {
+    libraries: Option<Vec<LibraryNameItem>>,
+}
+
+fn maven_to_local_path(maven_name: &str) -> Option<PathBuf> {
+    let parts: Vec<&str> = maven_name.split(':').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let group = parts[0].replace('.', "/");
+    let artifact = parts[1];
+    let version = parts[2];
+    let classifier = if parts.len() > 3 { format!("-{}", parts[3]) } else { "".to_string() };
+
+    let filename = format!("{}-{}{}.jar", artifact, version, classifier);
+    let rel_path = format!("{}/{}/{}/{}", group, artifact, version, filename);
+    Some(PathBuf::from(rel_path))
+}
+
+fn extract_semver(p: &Path) -> Vec<u32> {
+    if let Some(parent) = p.parent() {
+        if let Some(folder_name) = parent.file_name().and_then(|s| s.to_str()) {
+            return folder_name
+                .split(|c: char| !c.is_numeric())
+                .filter_map(|s| s.parse().ok())
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn compare_semver_paths(a: &Path, b: &Path) -> std::cmp::Ordering {
+    let ver_a = extract_semver(a);
+    let ver_b = extract_semver(b);
+
+    let max_len = std::cmp::max(ver_a.len(), ver_b.len());
+    for i in 0..max_len {
+        let num_a = ver_a.get(i).cloned().unwrap_or(0);
+        let num_b = ver_b.get(i).cloned().unwrap_or(0);
+        if num_a != num_b {
+            return num_b.cmp(&num_a); // Giảm dần: bản số lớn nhất đứng trước (10.0 > 8.0 > 4.0)
+        }
+    }
+    b.cmp(a)
+}
 
 fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
     if let Ok(entries) = fs::read_dir(dir) {
@@ -19,13 +72,52 @@ fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
     }
 }
 
-/// Thu thập và ưu tiên phiên bản thư viện mới nhất (loại bỏ các bản cũ trùng lặp như authlib 3.x gây lỗi NoSuchMethodError)
-fn collect_and_filter_libraries(libraries_dir: &Path) -> Vec<String> {
+/// Thu thập danh sách Classpath chuẩn mực từ JSON Manifest của phiên bản game
+fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<String> {
+    let libraries_dir = game_dir.join("libraries");
+    let mut manifest_jars = Vec::new();
+    let mut manifest_found = false;
+
+    let versions_to_check = vec![
+        version_id.to_string(),
+        version_id.split('-').next().unwrap_or(version_id).to_string(),
+    ];
+
+    for ver in versions_to_check {
+        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
+        if json_path.exists() {
+            if let Ok(content) = fs::read_to_string(&json_path) {
+                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                    if let Some(libs) = parsed.libraries {
+                        manifest_found = true;
+                        for lib_item in libs {
+                            if let Some(maven_name) = lib_item.name {
+                                if let Some(rel_path) = maven_to_local_path(&maven_name) {
+                                    let full_jar = libraries_dir.join(rel_path);
+                                    if full_jar.exists() {
+                                        manifest_jars.push(full_jar.to_string_lossy().to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if manifest_found && !manifest_jars.is_empty() {
+        manifest_jars.dedup();
+        return manifest_jars;
+    }
+
+    // Fallback: Thu thập và ưu tiên phiên bản thư viện mới nhất theo Semver số nguyên
     let mut raw_jars = Vec::new();
-    collect_jars_recursive(libraries_dir, &mut raw_jars);
+    if libraries_dir.exists() {
+        collect_jars_recursive(&libraries_dir, &mut raw_jars);
+    }
 
     let mut artifact_map: HashMap<String, Vec<PathBuf>> = HashMap::new();
-
     for jar_str in raw_jars {
         let p = PathBuf::from(&jar_str);
         if let Some(parent) = p.parent() {
@@ -40,8 +132,7 @@ fn collect_and_filter_libraries(libraries_dir: &Path) -> Vec<String> {
 
     let mut final_jars = Vec::new();
     for (_key, mut paths) in artifact_map {
-        // Sắp xếp phiên bản giảm dần (bản mới hơn đứng trước)
-        paths.sort_by(|a, b| b.cmp(a));
+        paths.sort_by(|a, b| compare_semver_paths(a, b));
         if let Some(best) = paths.first() {
             final_jars.push(best.to_string_lossy().to_string());
         }
@@ -58,7 +149,6 @@ pub fn launch_game(
 ) -> Result<u32, String> {
     let game_dir = PathBuf::from(&config.game_dir);
     let assets_dir = game_dir.join("assets");
-    let libraries_dir = game_dir.join("libraries");
     
     // Tự động tìm Client Jar thích hợp
     let version_dir = game_dir.join("versions").join(version_id);
@@ -89,12 +179,10 @@ pub fn launch_game(
     let min_ram_arg = format!("-Xms{}M", config.min_ram_mb);
     let max_ram_arg = format!("-Xmx{}M", config.max_ram_mb);
 
-    // Thu thập và ưu tiên các thư viện JAR phiên bản mới nhất
+    // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
-    if libraries_dir.exists() {
-        let filtered_libs = collect_and_filter_libraries(&libraries_dir);
-        jar_list.extend(filtered_libs);
-    }
+    let version_libs = collect_libraries_for_version(&game_dir, version_id);
+    jar_list.extend(version_libs);
 
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
