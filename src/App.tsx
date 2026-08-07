@@ -203,6 +203,7 @@ export function App() {
   const [versionTabLoader, setVersionTabLoader]     = useState<VersionSubTab>("downloaded");
   const [isLoadingVersions, setIsLoadingVersions]   = useState(false);
   const [versionSearchQuery, setVersionSearchQuery] = useState("");
+  const [showSnapshots, setShowSnapshots]           = useState(false);
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null);
 
   // Modrinth API Gallery State
@@ -280,47 +281,69 @@ export function App() {
         const data = await res.json();
         const releaseEntries = (data.versions || []).filter((v: any) => v.type === "release");
 
-        const vanillaList: VersionItem[] = releaseEntries.map((v: any) => ({
+        const vanillaList: VersionItem[] = (data.versions || []).map((v: any) => ({
           id: v.id,
           label: v.id,
-          sub: `Released ${v.releaseTime ? v.releaseTime.substring(0, 10) : "Official"}`,
+          sub: `${v.type === "release" ? "Official Release" : v.type === "snapshot" ? "Mojang Snapshot" : "Old Beta/Alpha"} · ${v.releaseTime ? v.releaseTime.substring(0, 10) : ""}`,
           loader: "vanilla" as LoaderType,
           versionStr: v.id,
           isInstalled: isVersionInstalledOnDisk(v.id, realDiskIds),
           releaseDate: v.releaseTime,
         }));
 
-        const optifineStandalone: VersionItem[] = [
-          { id: "1.20.1-optifine-hd", label: "1.20.1 OptiFine HD U I7", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-optifine-hd", realDiskIds) },
-          { id: "1.19.4-optifine-hd", label: "1.19.4 OptiFine HD U I4", sub: "OptiFine Standalone", loader: "vanilla", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-optifine-hd", realDiskIds) },
-        ];
+        const fabricVariants: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-fabric`,
+          label: `${v.id} Fabric`,
+          sub: "Fabric Loader Latest",
+          loader: "fabric" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-fabric`, realDiskIds),
+        }));
 
-        const fabricVariants: VersionItem[] = [
-          { id: "1.21.1-fabric", label: "1.21.1 Fabric", sub: "Loader 0.16.0", loader: "fabric", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-fabric", realDiskIds) },
-          { id: "1.20.1-fabric", label: "1.20.1 Fabric", sub: "Loader 0.15.11", loader: "fabric", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-fabric", realDiskIds) },
-          { id: "1.19.4-fabric", label: "1.19.4 Fabric", sub: "Loader 0.14.24", loader: "fabric", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-fabric", realDiskIds) },
-        ];
+        const forgeVariants: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-forge`,
+          label: `${v.id} Forge`,
+          sub: "MinecraftForge Build",
+          loader: "forge" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-forge`, realDiskIds),
+        }));
 
-        const forgeVariants: VersionItem[] = [
-          { id: "1.20.4-forge", label: "1.20.4 Forge", sub: "Forge 49.0.30", loader: "forge", versionStr: "1.20.4", isInstalled: isVersionInstalledOnDisk("1.20.4-forge", realDiskIds) },
-          { id: "1.20.1-forge-opti", label: "1.20.1 Forge + OptiFine", sub: "Forge 47.2.0 + OptiForge", loader: "forge", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-forge-opti", realDiskIds) },
-          { id: "1.16.5-forge", label: "1.16.5 Forge", sub: "Forge 36.2.39", loader: "forge", versionStr: "1.16.5", isInstalled: isVersionInstalledOnDisk("1.16.5-forge", realDiskIds) },
-        ];
+        const optifineStandalone: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-optifine`,
+          label: `${v.id} OptiFine HD`,
+          sub: "OptiFine Standalone FPS Booster",
+          loader: "vanilla" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-optifine`, realDiskIds),
+        }));
 
-        const neoforgeVariants: VersionItem[] = [
-          { id: "1.21.1-neoforge", label: "1.21.1 NeoForge", sub: "NeoForge 21.1.18", loader: "neoforge", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-neoforge", realDiskIds) },
-          { id: "1.20.4-neoforge", label: "1.20.4 NeoForge", sub: "NeoForge 20.4.80", loader: "neoforge", versionStr: "1.20.4", isInstalled: isVersionInstalledOnDisk("1.20.4-neoforge", realDiskIds) },
-        ];
+        const neoforgeVariants: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-neoforge`,
+          label: `${v.id} NeoForge`,
+          sub: "NeoForge Official Build",
+          loader: "neoforge" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-neoforge`, realDiskIds),
+        }));
 
-        const quiltVariants: VersionItem[] = [
-          { id: "1.20.1-quilt", label: "1.20.1 Quilt", sub: "Loader 0.23.0", loader: "quilt", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-quilt", realDiskIds) },
-          { id: "1.19.4-quilt", label: "1.19.4 Quilt", sub: "Loader 0.19.2", loader: "quilt", versionStr: "1.19.4", isInstalled: isVersionInstalledOnDisk("1.19.4-quilt", realDiskIds) },
-        ];
+        const quiltVariants: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-quilt`,
+          label: `${v.id} Quilt`,
+          sub: "Quilt Loader Build",
+          loader: "quilt" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-quilt`, realDiskIds),
+        }));
 
-        const irisVariants: VersionItem[] = [
-          { id: "1.21.1-iris", label: "1.21.1 Iris Shaders", sub: "Iris 1.7.2 + Sodium", loader: "iris", versionStr: "1.21.1", isInstalled: isVersionInstalledOnDisk("1.21.1-iris", realDiskIds) },
-          { id: "1.20.1-iris", label: "1.20.1 Iris Shaders", sub: "Iris 1.6.11 + Sodium", loader: "iris", versionStr: "1.20.1", isInstalled: isVersionInstalledOnDisk("1.20.1-iris", realDiskIds) },
-        ];
+        const irisVariants: VersionItem[] = releaseEntries.map((v: any) => ({
+          id: `${v.id}-iris`,
+          label: `${v.id} Iris Shaders`,
+          sub: "Iris Shaders + Sodium Engine",
+          loader: "iris" as LoaderType,
+          versionStr: v.id,
+          isInstalled: isVersionInstalledOnDisk(`${v.id}-iris`, realDiskIds),
+        }));
 
         const predefinedList = [
           ...neoforgeVariants,
@@ -693,7 +716,14 @@ export function App() {
       const matchesSearch =
         v.label.toLowerCase().includes(versionSearchQuery.toLowerCase()) ||
         v.sub.toLowerCase().includes(versionSearchQuery.toLowerCase());
-      return matchesTab && matchesSearch;
+
+      const matchesSnapshot =
+        showSnapshots ||
+        v.isInstalled ||
+        v.sub.includes("Official Release") ||
+        v.loader !== "vanilla";
+
+      return matchesTab && matchesSearch && matchesSnapshot;
     })
     .sort(compareVersions);
 
@@ -953,16 +983,28 @@ export function App() {
                 </p>
               </div>
 
-              <div className="relative w-full md:w-72">
-                <Search size={14} className="absolute left-3 top-3" style={{ color: subText }} />
-                <input
-                  type="text"
-                  value={versionSearchQuery}
-                  onChange={(e) => setVersionSearchQuery(e.target.value)}
-                  placeholder="Search versions (e.g. 1.21.1, 1.20)..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
-                  style={{ background: inputBg, borderColor: border, color: titleText }}
-                />
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none whitespace-nowrap" style={{ color: titleText }}>
+                  <input
+                    type="checkbox"
+                    checked={showSnapshots}
+                    onChange={(e) => setShowSnapshots(e.target.checked)}
+                    className="accent-emerald-500 rounded cursor-pointer w-4 h-4"
+                  />
+                  <span>Snapshots & Betas</span>
+                </label>
+
+                <div className="relative w-full md:w-72">
+                  <Search size={14} className="absolute left-3 top-3" style={{ color: subText }} />
+                  <input
+                    type="text"
+                    value={versionSearchQuery}
+                    onChange={(e) => setVersionSearchQuery(e.target.value)}
+                    placeholder="Search versions (e.g. 1.21.1, 1.20)..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-colors focus:border-emerald-500"
+                    style={{ background: inputBg, borderColor: border, color: titleText }}
+                  />
+                </div>
               </div>
             </div>
 

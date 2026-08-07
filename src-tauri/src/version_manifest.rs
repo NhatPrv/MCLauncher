@@ -34,6 +34,30 @@ pub async fn fetch_vanilla_versions() -> Result<VersionManifest, String> {
     Ok(manifest)
 }
 
+pub async fn fetch_all_fabric_game_versions() -> Result<Vec<String>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let url = "https://meta.fabricmc.net/v2/versions/game";
+    if let Ok(res) = client.get(url).send().await {
+        if res.status().is_success() {
+            #[derive(Deserialize)]
+            struct FabricGameVersion {
+                version: String,
+            }
+            if let Ok(entries) = res.json::<Vec<FabricGameVersion>>().await {
+                return Ok(entries.into_iter().map(|e| e.version).collect());
+            }
+        }
+    }
+    Ok(vec![
+        "1.21.1".to_string(), "1.21".to_string(), "1.20.6".to_string(), "1.20.4".to_string(),
+        "1.20.2".to_string(), "1.20.1".to_string(), "1.19.4".to_string(), "1.19.2".to_string(),
+        "1.18.2".to_string(), "1.16.5".to_string(), "1.12.2".to_string()
+    ])
+}
+
 pub async fn fetch_fabric_versions(game_version: &str) -> Result<Vec<String>, String> {
     let url = format!("https://meta.fabricmc.net/v2/versions/loader/{}", game_version);
     let client = reqwest::Client::builder().user_agent("MCLauncher/4.2.1").build().map_err(|e| e.to_string())?;
