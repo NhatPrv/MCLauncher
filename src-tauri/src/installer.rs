@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 use crate::downloader::{verify_and_download_file, download_file_with_progress};
 
@@ -52,12 +52,54 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
     let artifact = parts[1];
     let version = parts[2];
     let classifier = if parts.len() > 3 { format!("-{}", parts[3]) } else { "".to_string() };
-
     let filename = format!("{}-{}{}.jar", artifact, version, classifier);
     let rel_path = format!("{}/{}/{}/{}", group, artifact, version, filename);
     let url = format!("https://libraries.minecraft.net/{}", rel_path);
 
     Some((url, PathBuf::from(rel_path)))
+}
+
+#[derive(Deserialize)]
+struct ModrinthVersionFile {
+    url: String,
+    filename: String,
+}
+
+#[derive(Deserialize)]
+struct ModrinthVersionResponse {
+    files: Vec<ModrinthVersionFile>,
+}
+
+pub async fn download_modrinth_mod_to_dir(
+    mods_dir: &Path,
+    slug: &str,
+    game_version: &str,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://api.modrinth.com/v2/project/{}/version?game_versions=[\"{}\"]&loaders=[\"fabric\"]",
+        slug, game_version
+    );
+
+    if let Ok(res) = client.get(&url).send().await {
+        if res.status().is_success() {
+            if let Ok(versions) = res.json::<Vec<ModrinthVersionResponse>>().await {
+                if let Some(first_ver) = versions.first() {
+                    if let Some(primary_file) = first_ver.files.first() {
+                        let target_file = mods_dir.join(&primary_file.filename);
+                        if !target_file.exists() {
+                            let _ = verify_and_download_file(&primary_file.url, &target_file, None).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn get_required_java_version(version_id: &str) -> u32 {
@@ -370,6 +412,32 @@ pub async fn install_mod_loader(
             let version_id = format!("{}-iris-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+            // 1. Iris Shaders sử dụng nền Fabric Loader
+            let profile_url = format!(
+                "https://meta.fabricmc.net/v2/versions/loader/{}/0.16.0/profile/json",
+                game_version
+            );
+            let client = reqwest::Client::new();
+            if let Ok(res) = client.get(&profile_url).send().await {
+                if let Ok(text) = res.text().await {
+                    fs::write(target_dir.join(format!("{}.json", version_id)), text).ok();
+                }
+            }
+
+            let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
+            let iris_jar = target_dir.join(format!("{}.jar", version_id));
+            if vanilla_jar.exists() && !iris_jar.exists() {
+                let _ = fs::copy(vanilla_jar, iris_jar);
+            }
+
+            // 2. Tự động tải Iris Shaders & Sodium Engine Mod từ Modrinth API vào thư mục mods/
+            let mods_dir = base_path.join("mods");
+            fs::create_dir_all(&mods_dir).ok();
+
+            let _ = download_modrinth_mod_to_dir(&mods_dir, "iris", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&mods_dir, "sodium", game_version).await;
+
             Ok(version_id)
         }
     }
