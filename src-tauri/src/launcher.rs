@@ -209,6 +209,7 @@ pub fn launch_game(
         game_dir.join("libraries").join("net").join("fabricmc").join("sponge-mixin"),
         game_dir.join("libraries").join("org").join("spongepowered"),
         game_dir.join("libraries").join("net").join("fabricmc").join("intermediary"),
+        game_dir.join("libraries").join("org").join("slf4j"),
     ];
 
     for dir in extra_lib_dirs {

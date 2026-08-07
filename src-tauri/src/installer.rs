@@ -141,6 +141,7 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         ("org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar"),
         ("org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar"),
         ("net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar"),
+        ("org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar", "https://libraries.minecraft.net/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar"),
     ];
 
     let client = reqwest::Client::builder()
