@@ -464,14 +464,43 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
     Ok(())
 }
 
+pub async fn ensure_bundle_version_files(
+    _game_dir: &str,
+    target_dir: &Path,
+    game_version: &str,
+    version_id: &str,
+) -> Result<(), String> {
+    let client_jar = target_dir.join(format!("{}.jar", version_id));
+    if !client_jar.exists() {
+        if let Some(parent) = client_jar.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+        let manifest = crate::version_manifest::fetch_vanilla_versions().await.ok();
+        let mut downloaded = false;
+        if let Some(m) = manifest {
+            if let Some(v_item) = m.versions.iter().find(|v| v.id == game_version) {
+                if let Ok(res) = reqwest::get(&v_item.url).await {
+                    if let Ok(pkg) = res.json::<VersionPackageJson>().await {
+                        let _ = verify_and_download_file(&pkg.downloads.client.url, &client_jar, None).await;
+                        downloaded = true;
+                    }
+                }
+            }
+        }
+        if !downloaded {
+            let fallback_url = format!("https://launcher.mojang.com/v1/objects/1.21.1/client.jar");
+            let _ = verify_and_download_file(&fallback_url, &client_jar, None).await;
+        }
+    }
+    Ok(())
+}
+
 pub async fn install_mod_loader(
     game_dir: &str,
     game_version: &str,
     loader_type: ModLoaderType,
     loader_version: &str,
 ) -> Result<String, String> {
-    ensure_vanilla_version(game_dir, game_version).await?;
-
     let base_path = PathBuf::from(game_dir);
     let versions_dir = base_path.join("versions");
     fs::create_dir_all(&versions_dir).map_err(|e| e.to_string())?;
@@ -480,13 +509,15 @@ pub async fn install_mod_loader(
         ModLoaderType::Vanilla => {
             let target_dir = versions_dir.join(game_version);
             fs::create_dir_all(&target_dir).ok();
-            fs::write(target_dir.join("user_installed.tag"), "user").ok();
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, game_version).await;
             Ok(game_version.to_string())
         }
         ModLoaderType::Fabric => {
             let version_id = format!("{}-fabric-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
 
             let profile_url = format!(
                 "https://meta.fabricmc.net/v2/versions/loader/{}/{}/profile/json",
@@ -513,12 +544,6 @@ pub async fn install_mod_loader(
                 fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
             }
 
-            let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
-            let fabric_jar = target_dir.join(format!("{}.jar", version_id));
-            if vanilla_jar.exists() && !fabric_jar.exists() {
-                let _ = fs::copy(vanilla_jar, fabric_jar);
-            }
-
             let actual_loader_ver = if loader_version == "latest" { "0.16.0" } else { loader_version };
             let _ = ensure_fabric_loader_jar(game_dir, actual_loader_ver).await;
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
@@ -529,12 +554,15 @@ pub async fn install_mod_loader(
             let version_id = format!("{}-forge-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
             Ok(version_id)
         }
         ModLoaderType::Quilt => {
             let version_id = format!("{}-quilt-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
 
             let profile_url = format!(
                 "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
@@ -561,12 +589,6 @@ pub async fn install_mod_loader(
                 fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
             }
 
-            let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
-            let quilt_jar = target_dir.join(format!("{}.jar", version_id));
-            if vanilla_jar.exists() && !quilt_jar.exists() {
-                let _ = fs::copy(vanilla_jar, quilt_jar);
-            }
-
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
             Ok(version_id)
         }
@@ -574,18 +596,22 @@ pub async fn install_mod_loader(
             let version_id = format!("{}-neoforge-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
             Ok(version_id)
         }
         ModLoaderType::OptiFine => {
             let version_id = format!("{}-optifine-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
             Ok(version_id)
         }
         ModLoaderType::Iris => {
             let version_id = format!("{}-iris-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+            let _ = ensure_bundle_version_files(game_dir, &target_dir, game_version, &version_id).await;
 
             // 1. Iris Shaders sử dụng nền Fabric Loader
             let profile_url = format!(
@@ -611,12 +637,6 @@ pub async fn install_mod_loader(
                     version_id, game_version, game_version
                 );
                 fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
-            }
-
-            let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
-            let iris_jar = target_dir.join(format!("{}.jar", version_id));
-            if vanilla_jar.exists() && !iris_jar.exists() {
-                let _ = fs::copy(vanilla_jar, iris_jar);
             }
 
             // 2. Tự động tải Iris Shaders & Sodium Engine Mod từ Modrinth API vào thư mục mods/
