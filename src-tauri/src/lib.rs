@@ -8,7 +8,7 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version, ensure_portable_java21, ensure_portable_java21_with_app, ensure_vanilla_version};
+use installer::{ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version, ensure_portable_java21_with_app, ensure_vanilla_version};
 use launcher::launch_game;
 
 #[tauri::command]

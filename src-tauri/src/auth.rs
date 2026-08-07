@@ -51,7 +51,7 @@ pub async fn start_microsoft_oauth() -> Result<DeviceCodeResponse, String> {
         ("response_type", "token"),
     ];
 
-    let res = client
+    let _res = client
         .post("https://login.live.com/oauth20_connect.srf")
         .form(&params)
         .send()
