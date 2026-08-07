@@ -11,7 +11,7 @@ use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_ver
 use installer::{
     ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version,
     ensure_portable_java21_with_app, ensure_portable_java_version_with_app,
-    get_required_java_version, ensure_vanilla_version
+    get_required_java_version, ensure_vanilla_version, ensure_version_libraries_downloaded
 };
 use launcher::launch_game;
 
@@ -133,6 +133,7 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
     }
 
     let _ = ensure_vanilla_version(&final_config.game_dir, &version_id).await;
+    let _ = ensure_version_libraries_downloaded(&final_config.game_dir, &version_id).await;
 
     launch_game(&version_id, &account, &final_config)
 }

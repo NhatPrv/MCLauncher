@@ -54,9 +54,45 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
     let classifier = if parts.len() > 3 { format!("-{}", parts[3]) } else { "".to_string() };
     let filename = format!("{}-{}{}.jar", artifact, version, classifier);
     let rel_path = format!("{}/{}/{}/{}", group, artifact, version, filename);
-    let url = format!("https://libraries.minecraft.net/{}", rel_path);
 
+    let base_url = if parts[0].contains("fabricmc") {
+        "https://maven.fabricmc.net"
+    } else if parts[0].contains("neoforged") {
+        "https://maven.neoforged.net/releases"
+    } else if parts[0].contains("minecraftforge") {
+        "https://files.minecraftforge.net/maven"
+    } else {
+        "https://libraries.minecraft.net"
+    };
+
+    let url = format!("{}/{}", base_url, rel_path);
     Some((url, PathBuf::from(rel_path)))
+}
+
+pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &str) -> Result<(), String> {
+    let base_path = PathBuf::from(game_dir);
+    let libraries_dir = base_path.join("libraries");
+    let json_path = base_path.join("versions").join(version_id).join(format!("{}.json", version_id));
+
+    if json_path.exists() {
+        if let Ok(content) = fs::read_to_string(&json_path) {
+            if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
+                if let Some(libs) = parsed.libraries {
+                    for item in libs {
+                        if let Some(ref maven_name) = item.name {
+                            if let Some((url, rel_path)) = maven_to_url(maven_name) {
+                                let local_jar = libraries_dir.join(rel_path);
+                                if !local_jar.exists() {
+                                    let _ = verify_and_download_file(&url, &local_jar, None).await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -405,6 +441,8 @@ pub async fn install_mod_loader(
                 let _ = fs::copy(vanilla_jar, fabric_jar);
             }
 
+            let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
+
             Ok(version_id)
         }
         ModLoaderType::Forge => {
@@ -460,6 +498,8 @@ pub async fn install_mod_loader(
 
             let _ = download_modrinth_mod_to_dir(&mods_dir, "iris", game_version).await;
             let _ = download_modrinth_mod_to_dir(&mods_dir, "sodium", game_version).await;
+
+            let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
 
             Ok(version_id)
         }
