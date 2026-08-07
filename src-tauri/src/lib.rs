@@ -8,7 +8,11 @@ pub mod launcher;
 use config::{AppConfig, load_config, save_config, detect_java_path};
 use auth::{Account, create_offline_account, start_microsoft_oauth, DeviceCodeResponse};
 use version_manifest::{VersionManifest, fetch_vanilla_versions, fetch_fabric_versions, fetch_forge_versions, fetch_quilt_versions};
-use installer::{ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version, ensure_portable_java21_with_app, ensure_vanilla_version};
+use installer::{
+    ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version,
+    ensure_portable_java21_with_app, ensure_portable_java_version_with_app,
+    get_required_java_version, ensure_vanilla_version
+};
 use launcher::launch_game;
 
 #[tauri::command]
@@ -110,10 +114,19 @@ async fn install_mod_loader_cmd(
 
 #[tauri::command]
 async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, account: Account, config: AppConfig) -> Result<u32, String> {
-    // Đang dùng java nào thì giữ nguyên java đó! Chỉ khi java_path trống hoặc là "java" mặc định mới tự tải JRE 21.
     let mut final_config = config.clone();
-    if final_config.java_path.trim() == "java" || final_config.java_path.trim().is_empty() {
-        if let Ok(portable_java) = ensure_portable_java21_with_app(&app_handle, &final_config.game_dir).await {
+    
+    // Tự động xác định phiên bản JDK yêu cầu cho version_id này (8, 17, 21, 25)
+    let req_java_ver = get_required_java_version(&version_id);
+    
+    // Nếu java_path là mặc định ("java"), hoặc trống, hoặc chạy bản mới như 26.x đòi JDK 25:
+    // Tự động tải Portable JRE thích hợp (8, 17, 21, 25) về máy!
+    let need_auto_java = final_config.java_path.trim() == "java"
+        || final_config.java_path.trim().is_empty()
+        || (req_java_ver >= 25 && !final_config.java_path.contains("java-runtime-25"));
+
+    if need_auto_java {
+        if let Ok(portable_java) = ensure_portable_java_version_with_app(Some(&app_handle), &final_config.game_dir, req_java_ver).await {
             final_config.java_path = portable_java;
             save_config(&final_config).ok();
         }
