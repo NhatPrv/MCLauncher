@@ -217,6 +217,7 @@ pub fn launch_game(
         }
     }
 
+    let vanilla_version_str = version_id.split('-').next().unwrap_or(version_id);
     let main_class_to_run = get_main_class_for_version(&game_dir, version_id);
 
     args.extend(vec![
@@ -226,13 +227,13 @@ pub fn launch_game(
         "--username".to_string(),
         account.username.clone(),
         "--version".to_string(),
-        version_id.to_string(),
+        vanilla_version_str.to_string(),
         "--gameDir".to_string(),
         game_dir.to_string_lossy().to_string(),
         "--assetsDir".to_string(),
         assets_dir.to_string_lossy().to_string(),
         "--assetIndex".to_string(),
-        version_id.to_string(),
+        vanilla_version_str.to_string(),
         "--uuid".to_string(),
         account.uuid.clone(),
         "--accessToken".to_string(),

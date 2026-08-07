@@ -99,8 +99,34 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
     }
     Ok(())
 }
+pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
+    let libraries_dir = PathBuf::from(game_dir).join("libraries");
+    let asm_libs = vec![
+        "org/ow2/asm/asm/9.6/asm-9.6.jar",
+        "org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar",
+        "org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar",
+        "org/ow2/asm/asm-util/9.6/asm-util-9.6.jar",
+        "org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar",
+    ];
+
+    for rel_path in asm_libs {
+        let local_jar = libraries_dir.join(rel_path);
+        if !local_jar.exists() {
+            if let Some(parent) = local_jar.parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            let primary_url = format!("https://libraries.minecraft.net/{}", rel_path);
+            let mirror_url = format!("https://bmclapi2.bangbang93.com/maven/{}", rel_path);
+            if verify_and_download_file(&primary_url, &local_jar, None).await.is_err() {
+                let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+            }
+        }
+    }
+    Ok(())
+}
 
 pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &str) -> Result<(), String> {
+    let _ = ensure_required_asm_libraries(game_dir).await;
     let base_path = PathBuf::from(game_dir);
     let libraries_dir = base_path.join("libraries");
     let json_path = base_path.join("versions").join(version_id).join(format!("{}.json", version_id));
@@ -306,10 +332,26 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
 
     if versions_dir.exists() {
         if let Ok(entries) = fs::read_dir(&versions_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    let folder_name = entry.file_name().to_string_lossy().to_string();
-                    installed.push(folder_name);
+            let folders: Vec<String> = entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+
+            for folder in &folders {
+                let folder_path = versions_dir.join(folder);
+                let is_user_tag = folder_path.join("user_installed.tag").exists();
+
+                // Nếu là thư mục Vanilla (không chứa dấu -)
+                if !folder.contains('-') {
+                    // Chỉ hiện nếu người dùng chủ động bấm cài Vanilla (có file user_installed.tag)
+                    // HOẶC nếu không có bất kỳ bản mod loader nào gắn liền với phiên bản này
+                    let has_associated_mod = folders.iter().any(|f| f.starts_with(&format!("{}-", folder)));
+                    if is_user_tag || !has_associated_mod {
+                        installed.push(folder.clone());
+                    }
+                } else {
+                    installed.push(folder.clone());
                 }
             }
         }
@@ -451,7 +493,12 @@ pub async fn install_mod_loader(
     fs::create_dir_all(&versions_dir).map_err(|e| e.to_string())?;
 
     match loader_type {
-        ModLoaderType::Vanilla => Ok(game_version.to_string()),
+        ModLoaderType::Vanilla => {
+            let target_dir = versions_dir.join(game_version);
+            fs::create_dir_all(&target_dir).ok();
+            fs::write(target_dir.join("user_installed.tag"), "user").ok();
+            Ok(game_version.to_string())
+        }
         ModLoaderType::Fabric => {
             let version_id = format!("{}-fabric-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
@@ -462,11 +509,24 @@ pub async fn install_mod_loader(
                 game_version, loader_version
             );
             let client = reqwest::Client::new();
+            let mut wrote_json = false;
             if let Ok(res) = client.get(&profile_url).send().await {
-                if let Ok(text) = res.text().await {
-                    fs::write(target_dir.join(format!("{}.json", version_id)), text)
-                        .map_err(|e| e.to_string())?;
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        if text.contains("mainClass") {
+                            fs::write(target_dir.join(format!("{}.json", version_id)), text).ok();
+                            wrote_json = true;
+                        }
+                    }
                 }
+            }
+
+            if !wrote_json {
+                let fallback_json = format!(
+                    "{{\n  \"id\": \"{}\",\n  \"inheritsFrom\": \"{}\",\n  \"type\": \"release\",\n  \"mainClass\": \"net.fabricmc.loader.impl.launch.knot.KnotClient\",\n  \"libraries\": [\n    {{\"name\": \"net.fabricmc:fabric-loader:0.16.0\"}},\n    {{\"name\": \"net.fabricmc:intermediary:{}\"}}\n  ]\n}}",
+                    version_id, game_version, game_version
+                );
+                fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
             }
 
             let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
@@ -491,6 +551,39 @@ pub async fn install_mod_loader(
             let version_id = format!("{}-quilt-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+            let profile_url = format!(
+                "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
+                game_version, loader_version
+            );
+            let client = reqwest::Client::new();
+            let mut wrote_json = false;
+            if let Ok(res) = client.get(&profile_url).send().await {
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        if text.contains("mainClass") {
+                            fs::write(target_dir.join(format!("{}.json", version_id)), text).ok();
+                            wrote_json = true;
+                        }
+                    }
+                }
+            }
+
+            if !wrote_json {
+                let fallback_json = format!(
+                    "{{\n  \"id\": \"{}\",\n  \"inheritsFrom\": \"{}\",\n  \"type\": \"release\",\n  \"mainClass\": \"org.quiltmc.loader.impl.launch.knot.KnotClient\",\n  \"libraries\": [\n    {{\"name\": \"org.quiltmc:quilt-loader:0.26.0\"}}\n  ]\n}}",
+                    version_id, game_version
+                );
+                fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
+            }
+
+            let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
+            let quilt_jar = target_dir.join(format!("{}.jar", version_id));
+            if vanilla_jar.exists() && !quilt_jar.exists() {
+                let _ = fs::copy(vanilla_jar, quilt_jar);
+            }
+
+            let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
             Ok(version_id)
         }
         ModLoaderType::NeoForge => {
@@ -516,10 +609,24 @@ pub async fn install_mod_loader(
                 game_version
             );
             let client = reqwest::Client::new();
+            let mut wrote_json = false;
             if let Ok(res) = client.get(&profile_url).send().await {
-                if let Ok(text) = res.text().await {
-                    fs::write(target_dir.join(format!("{}.json", version_id)), text).ok();
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        if text.contains("mainClass") {
+                            fs::write(target_dir.join(format!("{}.json", version_id)), text).ok();
+                            wrote_json = true;
+                        }
+                    }
                 }
+            }
+
+            if !wrote_json {
+                let fallback_json = format!(
+                    "{{\n  \"id\": \"{}\",\n  \"inheritsFrom\": \"{}\",\n  \"type\": \"release\",\n  \"mainClass\": \"net.fabricmc.loader.impl.launch.knot.KnotClient\",\n  \"libraries\": [\n    {{\"name\": \"net.fabricmc:fabric-loader:0.16.0\"}},\n    {{\"name\": \"net.fabricmc:intermediary:{}\"}}\n  ]\n}}",
+                    version_id, game_version, game_version
+                );
+                fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
             }
 
             let vanilla_jar = versions_dir.join(game_version).join(format!("{}.jar", game_version));
