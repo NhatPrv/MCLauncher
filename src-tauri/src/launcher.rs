@@ -123,14 +123,6 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
         }
     }
 
-    // 2. Luôn tự động bổ sung các thư viện ASM cốt lõi (asm, asm-tree, asm-commons, asm-util) nếu có trong libraries
-    let asm_dir = libraries_dir.join("org").join("ow2").join("asm");
-    if asm_dir.exists() {
-        let mut asm_jars = Vec::new();
-        collect_jars_recursive(&asm_dir, &mut asm_jars);
-        manifest_jars.extend(asm_jars);
-    }
-
     if !manifest_jars.is_empty() {
         manifest_jars.sort();
         manifest_jars.dedup();
@@ -210,13 +202,15 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp đồng bộ OW2 ASM 9.7.1 & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi động mượt mà (Không quét net/fabricmc để tránh trùng lặp loader jar)
-    let system_lib_dirs = vec![
-        game_dir.join("libraries").join("org").join("ow2").join("asm"),
+    // Nạp SpongePowered Mixin (MixinBootstrap) vào System Classpath cho giai đoạn locateGame của KnotClient
+    // CHỈ quét cụ thể sponge-mixin (tránh nạp trùng fabric-loader gây verifyNotInTargetCl)
+    // KHÔNG quét org/ow2/asm tại đây vì collect_libraries_for_version() đã quét + Profile JSON đã khai báo
+    let mixin_lib_dirs = vec![
+        game_dir.join("libraries").join("net").join("fabricmc").join("sponge-mixin"),
         game_dir.join("libraries").join("org").join("spongepowered"),
     ];
 
-    for dir in system_lib_dirs {
+    for dir in mixin_lib_dirs {
         if dir.exists() {
             let mut extra_jars = Vec::new();
             collect_jars_recursive(&dir, &mut extra_jars);
