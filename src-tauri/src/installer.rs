@@ -102,29 +102,43 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
 pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
     let libraries_dir = PathBuf::from(game_dir).join("libraries");
     let asm_libs = vec![
-        "org/ow2/asm/asm/9.6/asm-9.6.jar",
-        "org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar",
-        "org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar",
-        "org/ow2/asm/asm-util/9.6/asm-util-9.6.jar",
-        "org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar",
+        ("org/ow2/asm/asm/9.6/asm-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.6/asm-9.6.jar"),
+        ("org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar"),
+        ("org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar"),
+        ("org/ow2/asm/asm-util/9.6/asm-util-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.6/asm-util-9.6.jar"),
+        ("org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar"),
     ];
 
-    for rel_path in asm_libs {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    for (rel_path, fabric_url) in asm_libs {
         let local_jar = libraries_dir.join(rel_path);
-        if !local_jar.exists() {
+        let need_download = !local_jar.exists() || fs::metadata(&local_jar).map(|m| m.len()).unwrap_or(0) < 5000;
+
+        if need_download {
             if let Some(parent) = local_jar.parent() {
                 fs::create_dir_all(parent).ok();
             }
+
             let urls = vec![
+                fabric_url.to_string(),
                 format!("https://libraries.minecraft.net/{}", rel_path),
-                format!("https://maven.fabricmc.net/{}", rel_path),
                 format!("https://bmclapi2.bangbang93.com/maven/{}", rel_path),
-                format!("https://repositories.mcbbs.net/maven/{}", rel_path),
             ];
 
             for u in urls {
-                if verify_and_download_file(&u, &local_jar, None).await.is_ok() && local_jar.exists() {
-                    break;
+                if let Ok(res) = client.get(&u).send().await {
+                    if res.status().is_success() {
+                        if let Ok(bytes) = res.bytes().await {
+                            if bytes.len() > 5000 {
+                                let _ = fs::write(&local_jar, &bytes);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
