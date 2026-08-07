@@ -101,12 +101,15 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
 }
 pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
     let libraries_dir = PathBuf::from(game_dir).join("libraries");
-    let asm_libs = vec![
+    let core_libs = vec![
         ("org/ow2/asm/asm/9.6/asm-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.6/asm-9.6.jar"),
         ("org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar"),
         ("org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar"),
         ("org/ow2/asm/asm-util/9.6/asm-util-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.6/asm-util-9.6.jar"),
         ("org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar"),
+        ("org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar"),
+        ("net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar"),
+        ("net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar"),
     ];
 
     let client = reqwest::Client::builder()
@@ -114,7 +117,7 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         .build()
         .map_err(|e| e.to_string())?;
 
-    for (rel_path, fabric_url) in asm_libs {
+    for (rel_path, fabric_url) in core_libs {
         let local_jar = libraries_dir.join(rel_path);
         let need_download = !local_jar.exists() || fs::metadata(&local_jar).map(|m| m.len()).unwrap_or(0) < 5000;
 

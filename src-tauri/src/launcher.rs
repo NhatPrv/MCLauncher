@@ -210,13 +210,21 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Luôn luôn nạp bổ sung các file ASM Jars (asm-tree, asm-commons...) cho KnotClient / Fabric / Quilt Engine
-    let asm_dir = game_dir.join("libraries").join("org").join("ow2").join("asm");
-    if asm_dir.exists() {
-        let mut asm_jars = Vec::new();
-        collect_jars_recursive(&asm_dir, &mut asm_jars);
-        jar_list.extend(asm_jars);
+    // Luôn luôn nạp bổ sung các file ASM Jars và SpongePowered Mixin Jars cho KnotClient / Fabric / Quilt Engine
+    let core_lib_dirs = vec![
+        game_dir.join("libraries").join("org").join("ow2").join("asm"),
+        game_dir.join("libraries").join("org").join("spongepowered"),
+        game_dir.join("libraries").join("net").join("fabricmc"),
+    ];
+
+    for dir in core_lib_dirs {
+        if dir.exists() {
+            let mut extra_jars = Vec::new();
+            collect_jars_recursive(&dir, &mut extra_jars);
+            jar_list.extend(extra_jars);
+        }
     }
+
     jar_list.sort();
     jar_list.dedup();
 
