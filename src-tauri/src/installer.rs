@@ -69,6 +69,37 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
     Some((url, PathBuf::from(rel_path)))
 }
 
+pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> Result<(), String> {
+    let base_path = PathBuf::from(game_dir);
+    let target_jar = base_path
+        .join("libraries")
+        .join("net")
+        .join("fabricmc")
+        .join("fabric-loader")
+        .join(loader_version)
+        .join(format!("fabric-loader-{}.jar", loader_version));
+
+    if !target_jar.exists() {
+        if let Some(parent) = target_jar.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+
+        let primary_url = format!(
+            "https://maven.fabricmc.net/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
+            loader_version, loader_version
+        );
+        let mirror_url = format!(
+            "https://bmclapi2.bangbang93.com/maven/net/fabricmc/fabric-loader/{}/fabric-loader-{}.jar",
+            loader_version, loader_version
+        );
+
+        if verify_and_download_file(&primary_url, &target_jar, None).await.is_err() {
+            let _ = verify_and_download_file(&mirror_url, &target_jar, None).await;
+        }
+    }
+    Ok(())
+}
+
 pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &str) -> Result<(), String> {
     let base_path = PathBuf::from(game_dir);
     let libraries_dir = base_path.join("libraries");
@@ -84,6 +115,10 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
                                 let local_jar = libraries_dir.join(rel_path);
                                 if !local_jar.exists() {
                                     let _ = verify_and_download_file(&url, &local_jar, None).await;
+                                    if !local_jar.exists() && url.contains("maven.fabricmc.net") {
+                                        let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
+                                        let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+                                    }
                                 }
                             }
                         }
@@ -290,7 +325,7 @@ pub fn delete_installed_version(game_dir: &str, version_id: &str) -> Result<(), 
 
     let mut deleted_count = 0;
 
-    // 1. Thử xóa đường dẫn trực tiếp
+    // 1. Thử xóa chính xác đường dẫn trực tiếp
     let exact_dir = versions_dir.join(version_id);
     if exact_dir.exists() {
         fs::remove_dir_all(&exact_dir)
@@ -298,23 +333,22 @@ pub fn delete_installed_version(game_dir: &str, version_id: &str) -> Result<(), 
         deleted_count += 1;
     }
 
-    // 2. Tìm kiếm các thư mục có suffix '-latest' hoặc tên mở rộng (ví dụ 1.21.1-fabric-latest)
-    if deleted_count == 0 {
-        if let Ok(entries) = fs::read_dir(&versions_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    let folder_name = entry.file_name().to_string_lossy().to_string();
-                    let is_match = folder_name == version_id
-                        || folder_name == format!("{}-latest", version_id)
-                        || (version_id.contains('-') && folder_name.starts_with(version_id));
+    // 2. Thử xóa đường dẫn tên suffix '-latest' đúng 1-1
+    let latest_dir = versions_dir.join(format!("{}-latest", version_id));
+    if latest_dir.exists() {
+        fs::remove_dir_all(&latest_dir)
+            .map_err(|e| format!("Không thể xóa thư mục '{}': {}. Vui lòng đóng game trước khi xóa!", latest_dir.display(), e))?;
+        deleted_count += 1;
+    }
 
-                    if is_match {
-                        fs::remove_dir_all(entry.path())
-                            .map_err(|e| format!("Không thể xóa thư mục '{}': {}. Vui lòng đóng game trước khi xóa!", entry.path().display(), e))?;
-                        deleted_count += 1;
-                    }
-                }
-            }
+    // 3. Nếu version_id có chứa '-latest' (Ví dụ: version_id là '1.21.1-iris-latest' -> folder là '1.21.1-iris')
+    if version_id.ends_with("-latest") {
+        let base_id = version_id.trim_end_matches("-latest");
+        let base_dir = versions_dir.join(base_id);
+        if base_dir.exists() {
+            fs::remove_dir_all(&base_dir)
+                .map_err(|e| format!("Không thể xóa thư mục '{}': {}. Vui lòng đóng game trước khi xóa!", base_dir.display(), e))?;
+            deleted_count += 1;
         }
     }
 
@@ -441,6 +475,8 @@ pub async fn install_mod_loader(
                 let _ = fs::copy(vanilla_jar, fabric_jar);
             }
 
+            let actual_loader_ver = if loader_version == "latest" { "0.16.0" } else { loader_version };
+            let _ = ensure_fabric_loader_jar(game_dir, actual_loader_ver).await;
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
 
             Ok(version_id)
@@ -499,6 +535,7 @@ pub async fn install_mod_loader(
             let _ = download_modrinth_mod_to_dir(&mods_dir, "iris", game_version).await;
             let _ = download_modrinth_mod_to_dir(&mods_dir, "sodium", game_version).await;
 
+            let _ = ensure_fabric_loader_jar(game_dir, "0.16.0").await;
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
 
             Ok(version_id)
