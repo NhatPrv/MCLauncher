@@ -125,6 +125,14 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
             }
         }
     }
+    // Dọn dẹp sponge-mixin cũ (0.12.5) nếu có - bản cũ thiếu field JAVA_22 gây NoSuchFieldError
+    let old_mixin_dirs = vec![
+        libraries_dir.join("net").join("fabricmc").join("sponge-mixin").join("0.12.5+mixin.0.8.5"),
+        libraries_dir.join("org").join("spongepowered").join("mixin").join("0.12.5+mixin.0.8.5"),
+    ];
+    for d in old_mixin_dirs {
+        if d.exists() { let _ = fs::remove_dir_all(&d); }
+    }
 
     let core_libs = vec![
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
@@ -132,8 +140,6 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         ("org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar"),
         ("org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar"),
         ("org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar"),
-        ("org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/org/spongepowered/mixin/0.12.5+mixin.0.8.5/mixin-0.12.5+mixin.0.8.5.jar"),
-        ("net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.12.5+mixin.0.8.5/sponge-mixin-0.12.5+mixin.0.8.5.jar"),
         ("net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar"),
     ];
 
