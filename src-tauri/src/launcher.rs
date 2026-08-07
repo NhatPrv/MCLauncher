@@ -210,11 +210,10 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp đồng bộ Fabric Loader, OW2 ASM 9.7.1 & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi động mượt mà
+    // Nạp đồng bộ OW2 ASM 9.7.1 & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi động mượt mà (Không quét net/fabricmc để tránh trùng lặp loader jar)
     let system_lib_dirs = vec![
         game_dir.join("libraries").join("org").join("ow2").join("asm"),
         game_dir.join("libraries").join("org").join("spongepowered"),
-        game_dir.join("libraries").join("net").join("fabricmc"),
     ];
 
     for dir in system_lib_dirs {
