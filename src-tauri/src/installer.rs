@@ -515,8 +515,9 @@ pub async fn ensure_bundle_version_files(
 
     let client_jar = target_dir.join(format!("{}.jar", version_id));
 
-    // Nếu file chưa có hoặc nhỏ hơn 1MB (file lỗi HTML 404), bắt buộc tải lại file client.jar chuẩn ~30MB
-    let need_download = !client_jar.exists() || fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) < 1_000_000;
+    // Kiểm tra xem file client.jar hiện tại có đúng chuẩn Mojang hay không (nếu file < 10MB hoặc bị lỗi Major Version 69, bắt buộc thay bằng Mojang Official Client Jar)
+    let current_size = fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0);
+    let need_download = !client_jar.exists() || current_size < 10_000_000;
 
     if need_download {
         let manifest = crate::version_manifest::fetch_vanilla_versions().await.ok();
@@ -527,7 +528,7 @@ pub async fn ensure_bundle_version_files(
                 if let Ok(res) = reqwest::get(&v_item.url).await {
                     if let Ok(pkg) = res.json::<VersionPackageJson>().await {
                         if verify_and_download_file(&pkg.downloads.client.url, &client_jar, None).await.is_ok() {
-                            if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+                            if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 10_000_000 {
                                 downloaded = true;
                             }
                         }
@@ -537,16 +538,16 @@ pub async fn ensure_bundle_version_files(
         }
 
         if !downloaded {
-            // Tải từ mirror BMCLAPI hoặc Mojang Official Client URL 1.21.1 (~30MB)
+            // Tải file Client Engine chính thức của Mojang (Major Version 65 / Java 21 LTS ~30MB)
             let mirror_urls = vec![
-                format!("https://bmclapi2.bangbang93.com/version/{}/client", game_version),
                 "https://piston-data.mojang.com/v1/objects/45068820c7e2b694b8e21fdf164906f0e4b8ed6c/client.jar".to_string(),
                 "https://bmclapi2.bangbang93.com/version/1.21.1/client".to_string(),
+                format!("https://bmclapi2.bangbang93.com/version/{}/client", game_version),
             ];
 
             for u in mirror_urls {
                 let _ = verify_and_download_file(&u, &client_jar, None).await;
-                if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+                if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 10_000_000 {
                     break;
                 }
             }
