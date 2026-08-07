@@ -4,6 +4,8 @@ use std::fs;
 use crate::config::{AppConfig, detect_java_path};
 use crate::auth::Account;
 
+use std::collections::HashMap;
+
 fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -15,6 +17,38 @@ fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
             }
         }
     }
+}
+
+/// Thu thập và ưu tiên phiên bản thư viện mới nhất (loại bỏ các bản cũ trùng lặp như authlib 3.x gây lỗi NoSuchMethodError)
+fn collect_and_filter_libraries(libraries_dir: &Path) -> Vec<String> {
+    let mut raw_jars = Vec::new();
+    collect_jars_recursive(libraries_dir, &mut raw_jars);
+
+    let mut artifact_map: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    for jar_str in raw_jars {
+        let p = PathBuf::from(&jar_str);
+        if let Some(parent) = p.parent() {
+            if let Some(artifact_dir) = parent.parent() {
+                let key = artifact_dir.to_string_lossy().to_string();
+                artifact_map.entry(key).or_default().push(p);
+                continue;
+            }
+        }
+        artifact_map.entry(jar_str.clone()).or_default().push(p);
+    }
+
+    let mut final_jars = Vec::new();
+    for (_key, mut paths) in artifact_map {
+        // Sắp xếp phiên bản giảm dần (bản mới hơn đứng trước)
+        paths.sort_by(|a, b| b.cmp(a));
+        if let Some(best) = paths.first() {
+            final_jars.push(best.to_string_lossy().to_string());
+        }
+    }
+
+    final_jars.sort();
+    final_jars
 }
 
 pub fn launch_game(
@@ -55,10 +89,11 @@ pub fn launch_game(
     let min_ram_arg = format!("-Xms{}M", config.min_ram_mb);
     let max_ram_arg = format!("-Xmx{}M", config.max_ram_mb);
 
-    // Thu thập 100% các file Libraries JAR thực tế
+    // Thu thập và ưu tiên các thư viện JAR phiên bản mới nhất
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
     if libraries_dir.exists() {
-        collect_jars_recursive(&libraries_dir, &mut jar_list);
+        let filtered_libs = collect_and_filter_libraries(&libraries_dir);
+        jar_list.extend(filtered_libs);
     }
 
     // Classpath construction
