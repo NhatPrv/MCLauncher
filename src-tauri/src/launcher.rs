@@ -248,6 +248,9 @@ pub fn launch_game(
 
     final_jars.sort();
 
+    // Loại bỏ tất cả các thư viện OW2 ASM khỏi System Classpath (-cp) để KnotClassLoader tự quản lý trong runtime và không bao giờ bị LinkageError!
+    final_jars.retain(|jar| !jar.replace('\\', "/").contains("org/ow2/asm"));
+
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
     let classpath = final_jars.join(cp_separator);
