@@ -14,7 +14,25 @@ struct LibraryNameItem {
 
 #[derive(Deserialize)]
 struct VersionManifestJson {
+    #[serde(rename = "mainClass")]
+    main_class: Option<String>,
     libraries: Option<Vec<LibraryNameItem>>,
+}
+
+fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
+    let json_path = game_dir.join("versions").join(version_id).join(format!("{}.json", version_id));
+    if json_path.exists() {
+        if let Ok(content) = fs::read_to_string(&json_path) {
+            if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                if let Some(mc) = parsed.main_class {
+                    if !mc.trim().is_empty() {
+                        return mc;
+                    }
+                }
+            }
+        }
+    }
+    "net.minecraft.client.main.Main".to_string()
 }
 
 fn maven_to_local_path(maven_name: &str) -> Option<PathBuf> {
@@ -199,10 +217,12 @@ pub fn launch_game(
         }
     }
 
+    let main_class_to_run = get_main_class_for_version(&game_dir, version_id);
+
     args.extend(vec![
         "-cp".to_string(),
         classpath,
-        "net.minecraft.client.main.Main".to_string(),
+        main_class_to_run,
         "--username".to_string(),
         account.username.clone(),
         "--version".to_string(),

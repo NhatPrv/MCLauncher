@@ -247,21 +247,9 @@ pub fn get_installed_versions(game_dir: &str) -> Vec<String> {
 }
 
 pub fn delete_installed_version(game_dir: &str, version_id: &str) -> Result<(), String> {
-    let versions_dir = PathBuf::from(game_dir).join("versions");
-    if versions_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&versions_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    let folder_name = entry.file_name().to_string_lossy().to_string();
-                    if folder_name == version_id
-                        || folder_name.starts_with(version_id)
-                        || version_id.starts_with(&folder_name)
-                    {
-                        let _ = fs::remove_dir_all(entry.path());
-                    }
-                }
-            }
-        }
+    let target_dir = PathBuf::from(game_dir).join("versions").join(version_id);
+    if target_dir.exists() {
+        let _ = fs::remove_dir_all(target_dir);
     }
     Ok(())
 }
