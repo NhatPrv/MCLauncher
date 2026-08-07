@@ -70,6 +70,14 @@ function OfflineAvatarIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function formatEta(seconds?: number): string {
+  if (!seconds || seconds <= 0) return "Đang ước tính...";
+  if (seconds < 60) return `Còn ~${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `Còn ~${mins}m ${secs}s`;
+}
+
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Tab = "home" | "versions" | "mods" | "account" | "settings";
 type LoaderType = "vanilla" | "fabric" | "forge" | "neoforge" | "quilt" | "iris";
@@ -101,6 +109,8 @@ interface DownloadProgressPayload {
   downloaded_bytes: number;
   total_bytes: number;
   percentage: number;
+  speed_mbps?: number;
+  eta_seconds?: number;
   status: string;
 }
 
@@ -1637,22 +1647,32 @@ export function App() {
       <footer className="relative z-20 flex flex-col flex-shrink-0 border-t backdrop-blur-xl transition-colors" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)" }}>
         
         {(isBusyDownloadingOrLaunching || downloadProgress) && (
-          <div className="w-full px-6 pt-3 pb-1 border-b space-y-1.5 transition-all" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.6)" : "rgba(241,245,249,0.8)" }}>
+          <div className="w-full px-6 pt-3 pb-2 border-b space-y-2 transition-all" style={{ borderColor: border, background: dark ? "rgba(15,23,42,0.85)" : "rgba(241,245,249,0.95)" }}>
             <div className="flex items-center justify-between text-xs font-bold">
               <div className="flex items-center gap-2 min-w-0" style={{ color: titleText }}>
                 <Activity size={14} className="text-emerald-500 animate-pulse flex-shrink-0" />
                 <span className="truncate">
-                  {downloadProgress ? `Downloading: ${downloadProgress.file_name}` : "Preparing game environment..."}
+                  {downloadProgress ? `Đang tải: ${downloadProgress.file_name}` : "Đang chuẩn bị môi trường và tài nguyên..."}
                 </span>
               </div>
 
               <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[11px]">
+                {downloadProgress && downloadProgress.speed_mbps !== undefined && downloadProgress.speed_mbps > 0 && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    ⚡ {downloadProgress.speed_mbps.toFixed(1)} MB/s
+                  </span>
+                )}
+                {downloadProgress && downloadProgress.eta_seconds !== undefined && downloadProgress.eta_seconds > 0 && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    ⏱️ {formatEta(downloadProgress.eta_seconds)}
+                  </span>
+                )}
                 {downloadProgress && downloadProgress.total_bytes > 0 && (
                   <span style={{ color: subText }}>
                     {formatBytes(downloadProgress.downloaded_bytes)} / {formatBytes(downloadProgress.total_bytes)}
                   </span>
                 )}
-                <span className="text-emerald-500 font-black">
+                <span className="text-emerald-500 font-black text-xs">
                   {currentPercentage.toFixed(1)}%
                 </span>
               </div>
