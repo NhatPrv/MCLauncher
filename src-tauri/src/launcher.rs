@@ -202,15 +202,16 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp SpongePowered Mixin (MixinBootstrap) vào System Classpath cho giai đoạn locateGame của KnotClient
-    // CHỈ quét cụ thể sponge-mixin (tránh nạp trùng fabric-loader gây verifyNotInTargetCl)
-    // KHÔNG quét org/ow2/asm tại đây vì collect_libraries_for_version() đã quét + Profile JSON đã khai báo
-    let mixin_lib_dirs = vec![
+    // Nạp bổ sung các thư viện cốt lõi cho Fabric/KnotClient nếu chưa có trong Profile JSON
+    // Quét cụ thể từng thư viện riêng lẻ, KHÔNG quét toàn bộ net/fabricmc/ để tránh trùng fabric-loader.jar
+    let extra_lib_dirs = vec![
+        game_dir.join("libraries").join("org").join("ow2").join("asm"),
         game_dir.join("libraries").join("net").join("fabricmc").join("sponge-mixin"),
         game_dir.join("libraries").join("org").join("spongepowered"),
+        game_dir.join("libraries").join("net").join("fabricmc").join("intermediary"),
     ];
 
-    for dir in mixin_lib_dirs {
+    for dir in extra_lib_dirs {
         if dir.exists() {
             let mut extra_jars = Vec::new();
             collect_jars_recursive(&dir, &mut extra_jars);
@@ -218,33 +219,19 @@ pub fn launch_game(
         }
     }
 
-    // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ hoàn toàn các file jar cũ như asm-tree-9.6.jar)
-    let mut artifact_map: std::collections::HashMap<String, Vec<PathBuf>> = std::collections::HashMap::new();
-    for jar_str in jar_list {
-        let p = PathBuf::from(&jar_str);
-        if let Some(parent) = p.parent() {
-            if let Some(artifact_dir) = parent.parent() {
-                let key = artifact_dir.to_string_lossy().to_string();
-                artifact_map.entry(key).or_default().push(p);
-                continue;
-            }
-        }
-        artifact_map.entry(jar_str.clone()).or_default().push(p);
-    }
+    // Loại bỏ trùng lặp
+    jar_list.sort();
+    jar_list.dedup();
 
-    let mut final_jars = Vec::new();
-    for (_key, mut paths) in artifact_map {
-        paths.sort_by(|a, b| compare_semver_paths(a, b));
-        if let Some(best) = paths.first() {
-            final_jars.push(best.to_string_lossy().to_string());
-        }
+    // Debug: log classpath để phát hiện lỗi thiếu thư viện
+    eprintln!("[MCLauncher DEBUG] Classpath entries ({} jars):", jar_list.len());
+    for j in &jar_list {
+        eprintln!("  CP: {}", j);
     }
-
-    final_jars.sort();
 
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
-    let classpath = final_jars.join(cp_separator);
+    let classpath = jar_list.join(cp_separator);
 
     let mut args: Vec<String> = vec![
         min_ram_arg,
