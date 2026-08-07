@@ -210,12 +210,18 @@ pub fn launch_game(
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp Fabric Loader Jar vào Classpath khởi đầu cho KnotClient (KnotClassLoader sẽ tự động nạp ASM & Mixin)
-    let fabric_loader_dir = game_dir.join("libraries").join("net").join("fabricmc").join("fabric-loader");
-    if fabric_loader_dir.exists() {
-        let mut fabric_jars = Vec::new();
-        collect_jars_recursive(&fabric_loader_dir, &mut fabric_jars);
-        jar_list.extend(fabric_jars);
+    // Nạp Fabric Loader & SpongePowered Mixin Jars vào System Classpath cho KnotClient khởi đầu (Không nạp org/ow2/asm để tránh LinkageError với KnotClassLoader)
+    let system_lib_dirs = vec![
+        game_dir.join("libraries").join("org").join("spongepowered"),
+        game_dir.join("libraries").join("net").join("fabricmc"),
+    ];
+
+    for dir in system_lib_dirs {
+        if dir.exists() {
+            let mut extra_jars = Vec::new();
+            collect_jars_recursive(&dir, &mut extra_jars);
+            jar_list.extend(extra_jars);
+        }
     }
 
     // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ hoàn toàn các file jar cũ như asm-tree-9.6.jar)
