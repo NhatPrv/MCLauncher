@@ -102,8 +102,26 @@ pub fn launch_game(
         config.resolution_height.to_string(),
     ]);
 
+    // Giải quyết triệt để lỗi OS error 206 (Command line too long trên Windows):
+    // Sử dụng tính năng Java @argfile truyền toàn bộ tham số qua file jvm_args.txt
+    let argfile_path = game_dir.join("jvm_args.txt");
+    let formatted_content = args
+        .iter()
+        .map(|s| {
+            if s.contains(' ') || s.contains('\\') || s.contains(';') {
+                format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+            } else {
+                s.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    fs::write(&argfile_path, formatted_content)
+        .map_err(|e| format!("Không thể ghi file tham số Java @argfile: {}", e))?;
+
     let child = SysCommand::new(&java_bin)
-        .args(&args)
+        .arg(format!("@{}", argfile_path.to_string_lossy()))
         .current_dir(&game_dir)
         .spawn()
         .map_err(|e| {
