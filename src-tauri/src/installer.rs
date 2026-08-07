@@ -115,10 +115,17 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
             if let Some(parent) = local_jar.parent() {
                 fs::create_dir_all(parent).ok();
             }
-            let primary_url = format!("https://libraries.minecraft.net/{}", rel_path);
-            let mirror_url = format!("https://bmclapi2.bangbang93.com/maven/{}", rel_path);
-            if verify_and_download_file(&primary_url, &local_jar, None).await.is_err() {
-                let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+            let urls = vec![
+                format!("https://libraries.minecraft.net/{}", rel_path),
+                format!("https://maven.fabricmc.net/{}", rel_path),
+                format!("https://bmclapi2.bangbang93.com/maven/{}", rel_path),
+                format!("https://repositories.mcbbs.net/maven/{}", rel_path),
+            ];
+
+            for u in urls {
+                if verify_and_download_file(&u, &local_jar, None).await.is_ok() && local_jar.exists() {
+                    break;
+                }
             }
         }
     }

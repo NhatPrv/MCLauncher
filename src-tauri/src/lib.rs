@@ -12,7 +12,7 @@ use installer::{
     ModLoaderType, install_mod_loader, get_installed_versions, delete_installed_version,
     ensure_portable_java21_with_app, ensure_portable_java_version_with_app,
     get_required_java_version, ensure_version_libraries_downloaded,
-    ensure_fabric_loader_jar
+    ensure_fabric_loader_jar, ensure_required_asm_libraries
 };
 use launcher::launch_game;
 
@@ -163,6 +163,7 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
         let _ = install_mod_loader(&final_config.game_dir, game_ver_str, loader_enum, "latest").await;
     }
 
+    let _ = ensure_required_asm_libraries(&final_config.game_dir).await;
     if version_id.contains("fabric") || version_id.contains("iris") {
         let _ = ensure_fabric_loader_jar(&final_config.game_dir, "0.16.0").await;
     }
