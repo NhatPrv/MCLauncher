@@ -237,6 +237,11 @@ pub fn launch_game(
 
     let vanilla_version_str = version_id.split('-').next().unwrap_or(version_id);
     let main_class_to_run = get_main_class_for_version(&game_dir, version_id);
+    let game_dir_to_use = if version_dir.exists() {
+        version_dir.to_string_lossy().to_string()
+    } else {
+        game_dir.to_string_lossy().to_string()
+    };
 
     args.extend(vec![
         "-cp".to_string(),
@@ -247,7 +252,7 @@ pub fn launch_game(
         "--version".to_string(),
         vanilla_version_str.to_string(),
         "--gameDir".to_string(),
-        game_dir.to_string_lossy().to_string(),
+        game_dir_to_use,
         "--assetsDir".to_string(),
         assets_dir.to_string_lossy().to_string(),
         "--assetIndex".to_string(),

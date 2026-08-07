@@ -477,28 +477,57 @@ pub async fn ensure_bundle_version_files(
     game_version: &str,
     version_id: &str,
 ) -> Result<(), String> {
+    // 1. Khởi tạo cấu trúc thư mục chuẩn TLauncher (mods, shaderpacks, resourcepacks, saves)
+    let mods_dir = target_dir.join("mods");
+    let shaderpacks_dir = target_dir.join("shaderpacks");
+    let resourcepacks_dir = target_dir.join("resourcepacks");
+    let saves_dir = target_dir.join("saves");
+
+    fs::create_dir_all(&mods_dir).ok();
+    fs::create_dir_all(&shaderpacks_dir).ok();
+    fs::create_dir_all(&resourcepacks_dir).ok();
+    fs::create_dir_all(&saves_dir).ok();
+
     let client_jar = target_dir.join(format!("{}.jar", version_id));
-    if !client_jar.exists() {
-        if let Some(parent) = client_jar.parent() {
-            fs::create_dir_all(parent).ok();
-        }
+
+    // Nếu file chưa có hoặc nhỏ hơn 1MB (file lỗi HTML 404), bắt buộc tải lại file client.jar chuẩn ~30MB
+    let need_download = !client_jar.exists() || fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) < 1_000_000;
+
+    if need_download {
         let manifest = crate::version_manifest::fetch_vanilla_versions().await.ok();
         let mut downloaded = false;
+
         if let Some(m) = manifest {
             if let Some(v_item) = m.versions.iter().find(|v| v.id == game_version) {
                 if let Ok(res) = reqwest::get(&v_item.url).await {
                     if let Ok(pkg) = res.json::<VersionPackageJson>().await {
-                        let _ = verify_and_download_file(&pkg.downloads.client.url, &client_jar, None).await;
-                        downloaded = true;
+                        if verify_and_download_file(&pkg.downloads.client.url, &client_jar, None).await.is_ok() {
+                            if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+                                downloaded = true;
+                            }
+                        }
                     }
                 }
             }
         }
+
         if !downloaded {
-            let fallback_url = format!("https://launcher.mojang.com/v1/objects/1.21.1/client.jar");
-            let _ = verify_and_download_file(&fallback_url, &client_jar, None).await;
+            // Tải từ mirror BMCLAPI hoặc Mojang Official Client URL 1.21.1 (~30MB)
+            let mirror_urls = vec![
+                format!("https://bmclapi2.bangbang93.com/version/{}/client", game_version),
+                "https://piston-data.mojang.com/v1/objects/45068820c7e2b694b8e21fdf164906f0e4b8ed6c/client.jar".to_string(),
+                "https://bmclapi2.bangbang93.com/version/1.21.1/client".to_string(),
+            ];
+
+            for u in mirror_urls {
+                let _ = verify_and_download_file(&u, &client_jar, None).await;
+                if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+                    break;
+                }
+            }
         }
     }
+
     Ok(())
 }
 
@@ -646,12 +675,16 @@ pub async fn install_mod_loader(
                 fs::write(target_dir.join(format!("{}.json", version_id)), fallback_json).ok();
             }
 
-            // 2. Tự động tải Iris Shaders & Sodium Engine Mod từ Modrinth API vào thư mục mods/
-            let mods_dir = base_path.join("mods");
-            fs::create_dir_all(&mods_dir).ok();
+            // 2. Tự động tải Iris Shaders & Sodium Engine Mod từ Modrinth API vào thư mục versions/{version_id}/mods/
+            let local_mods_dir = target_dir.join("mods");
+            let global_mods_dir = base_path.join("mods");
+            fs::create_dir_all(&local_mods_dir).ok();
+            fs::create_dir_all(&global_mods_dir).ok();
 
-            let _ = download_modrinth_mod_to_dir(&mods_dir, "iris", game_version).await;
-            let _ = download_modrinth_mod_to_dir(&mods_dir, "sodium", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&local_mods_dir, "iris", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&local_mods_dir, "sodium", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&global_mods_dir, "iris", game_version).await;
+            let _ = download_modrinth_mod_to_dir(&global_mods_dir, "sodium", game_version).await;
 
             let _ = ensure_fabric_loader_jar(game_dir, "0.16.0").await;
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
