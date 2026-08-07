@@ -117,19 +117,10 @@ async fn install_mod_loader_cmd(
 async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, account: Account, config: AppConfig) -> Result<u32, String> {
     let mut final_config = config.clone();
     
-    // Tự động xác định phiên bản JDK chuẩn cho version_id này (8, 17, 21, 25)
+    // Tự động xác định phiên bản JDK chuẩn cho version_id này (8, 17, 21)
     let req_java_ver = get_required_java_version(&version_id);
-    let target_runtime_folder = format!("java-runtime-{}", req_java_ver);
-
-    // Tự động sử dụng / tải về Portable JRE thích hợp (8, 17, 21, 25) cho phiên bản game hiện tại
-    let need_auto_java = final_config.java_path.trim() == "java"
-        || final_config.java_path.trim().is_empty()
-        || !final_config.java_path.contains(&target_runtime_folder);
-
-    if need_auto_java {
-        if let Ok(portable_java) = ensure_portable_java_version_with_app(Some(&app_handle), &final_config.game_dir, req_java_ver).await {
-            final_config.java_path = portable_java;
-        }
+    if let Ok(portable_java) = ensure_portable_java_version_with_app(Some(&app_handle), &final_config.game_dir, req_java_ver).await {
+        final_config.java_path = portable_java;
     }
 
     // Tự động cài đặt phiên bản nếu thư mục phiên bản chưa tồn tại trên đĩa cứng
