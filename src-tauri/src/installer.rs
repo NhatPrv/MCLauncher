@@ -125,13 +125,17 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
             }
         }
     }
-    // Dọn dẹp sponge-mixin cũ (0.12.5) nếu có - bản cũ thiếu field JAVA_22 gây NoSuchFieldError
-    let old_mixin_dirs = vec![
-        libraries_dir.join("net").join("fabricmc").join("sponge-mixin").join("0.12.5+mixin.0.8.5"),
-        libraries_dir.join("org").join("spongepowered").join("mixin").join("0.12.5+mixin.0.8.5"),
-    ];
-    for d in old_mixin_dirs {
-        if d.exists() { let _ = fs::remove_dir_all(&d); }
+    // Dọn dẹp Authlib cũ (< 5.0) nếu có - bản cũ thiếu method Property.name() gây ExceptionInInitializerError
+    let authlib_dir = libraries_dir.join("com").join("mojang").join("authlib");
+    if authlib_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&authlib_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("1.") || name.starts_with("2.") || name.starts_with("3.") || name.starts_with("4.") {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
     }
 
     let core_libs = vec![
