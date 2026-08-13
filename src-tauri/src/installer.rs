@@ -125,13 +125,13 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
             }
         }
     }
-    // Dọn dẹp Authlib cũ (< 5.0) nếu có - bản cũ thiếu method Property.name() gây ExceptionInInitializerError
+    // Dọn dẹp Authlib cũ (< 6.0) nếu có - bản cũ thiếu method GameProfile.getId() hoặc Property.name()
     let authlib_dir = libraries_dir.join("com").join("mojang").join("authlib");
     if authlib_dir.exists() {
         if let Ok(entries) = fs::read_dir(&authlib_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("1.") || name.starts_with("2.") || name.starts_with("3.") || name.starts_with("4.") {
+                if !name.starts_with("6.") {
                     let _ = fs::remove_dir_all(entry.path());
                 }
             }
@@ -139,6 +139,7 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
     }
 
     let core_libs = vec![
+        ("com/mojang/authlib/6.0.54/authlib-6.0.54.jar", "https://libraries.minecraft.net/com/mojang/authlib/6.0.54/authlib-6.0.54.jar"),
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
         ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),
         ("org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar"),

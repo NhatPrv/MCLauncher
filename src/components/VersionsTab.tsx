@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Download } from 'lucide-react';
+import { Check, Download, Box, Hammer, Zap } from 'lucide-react';
 import { AppConfig } from '../types';
 import { OptionCard } from './OptionCard';
 import { invoke } from '@tauri-apps/api/core';
@@ -20,14 +20,20 @@ export const VersionsTab: React.FC<VersionsTabProps> = ({
   const [installing, setInstalling] = useState<string | null>(null);
   const [installedNotice, setInstalledNotice] = useState<string | null>(null);
 
-  const modLoaders = [
-    { id: 'Vanilla', title: 'Vanilla Standard', desc: 'Phiên bản gốc Mojang, nguyên bản không sửa đổi.', icon: '📦', badge: 'Gốc' },
+  const vanillaLoaders = [
+    { id: 'Vanilla', title: 'Vanilla Standard', desc: 'Phiên bản gốc Mojang, nguyên bản không sửa đổi.', icon: '📦', badge: 'Gốc Mojang' },
+  ];
+
+  const forgeLoaders = [
+    { id: 'Forge', title: 'Minecraft Forge', desc: 'Mod loader truyền thống giàu tính năng cho các Modpack lớn.', icon: '🔨', badge: 'Forge Chính Thức' },
+    { id: 'NeoForge', title: 'NeoForge', desc: 'Hệ sinh thái Forge thế hệ mới tối ưu cho các bản Minecraft hiện đại.', icon: '💥', badge: 'NeoForge Mới' },
+  ];
+
+  const fabricLoaders = [
     { id: 'Fabric', title: 'Fabric Loader', desc: 'Mod loader thế hệ mới nhẹ, siêu tối ưu FPS và hỗ trợ mods phong phú.', icon: '⚡', badge: 'Khuyên Dùng' },
-    { id: 'Forge', title: 'Minecraft Forge', desc: 'Mod loader truyền thống giàu tính năng cho các Modpack lớn.', icon: '🔨', badge: 'Phổ Biến' },
-    { id: 'Quilt', title: 'Quilt Loader', desc: 'Dự án mod loader hiện đại kế thừa từ Fabric với thiết kế mô-đun.', icon: '🍃', badge: 'Hiện Đại' },
-    { id: 'NeoForge', title: 'NeoForge', desc: 'Hệ sinh thái Forge thế hệ mới cho các bản Minecraft hiện đại.', icon: '💥', badge: 'Mới' },
+    { id: 'Iris', title: 'Iris Shaders & Sodium', desc: 'Công nghệ render Shaders tốc độ cao tương thích cực tốt với Fabric.', icon: '✨', badge: 'Graphics & FPS' },
     { id: 'OptiFine', title: 'OptiFine HD', desc: 'Tối ưu hóa đồ họa, hỗ trợ HD Textures & gia tăng FPS tối đa.', icon: '🔍', badge: 'FPS Booster' },
-    { id: 'Iris', title: 'Iris Shaders', desc: 'Công nghệ render Shaders tốc độ cao tương thích cực tốt với Fabric.', icon: '✨', badge: 'Graphics' },
+    { id: 'Quilt', title: 'Quilt Loader', desc: 'Dự án mod loader hiện đại kế thừa từ Fabric với thiết kế mô-đun.', icon: '🍃', badge: 'Hiện Đại' },
   ];
 
   const handleInstallLoader = async (loaderId: string) => {
@@ -49,25 +55,20 @@ export const VersionsTab: React.FC<VersionsTabProps> = ({
     }
   };
 
-  return (
-    <div className="flex-1 p-8 overflow-y-auto space-y-8">
-      <div>
-        <h2 className="text-3xl font-black tracking-tight">Quản Lý Mod Loaders & Engine Graphics</h2>
-        <p className="text-slate-400 text-sm mt-1">
-          Lựa chọn ô Mod Loader mong muốn cho phiên bản <span className="text-emerald-400 font-bold">Minecraft {selectedVersion}</span>.
-        </p>
+  const renderLoaderGroup = (title: string, subtitle: string, icon: React.ReactNode, loaders: typeof vanillaLoaders, borderColor: string) => (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: config.theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
+        <div className="p-2 rounded-xl" style={{ background: `${borderColor}15`, color: borderColor }}>
+          {icon}
+        </div>
+        <div>
+          <h3 className="text-lg font-black tracking-tight" style={{ color: config.theme === 'dark' ? '#f8fafc' : '#0f172a' }}>{title}</h3>
+          <p className="text-xs text-slate-400 font-medium">{subtitle}</p>
+        </div>
       </div>
 
-      {installedNotice && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center space-x-2">
-          <Check className="w-5 h-5 flex-shrink-0" />
-          <span>{installedNotice}</span>
-        </div>
-      )}
-
-      {/* Grid Option Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modLoaders.map((loader) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {loaders.map((loader) => {
           const isSelected = selectedLoader === loader.id;
           const isCurrentInstalling = installing === loader.id;
 
@@ -108,6 +109,51 @@ export const VersionsTab: React.FC<VersionsTabProps> = ({
           );
         })}
       </div>
+    </div>
+  );
+
+  return (
+    <div className="flex-1 p-8 overflow-y-auto space-y-10">
+      <div>
+        <h2 className="text-3xl font-black tracking-tight">Quản Lý Mod Loaders & Engine Graphics</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Các danh mục đã được phân loại riêng biệt cho phiên bản <span className="text-emerald-400 font-bold">Minecraft {selectedVersion}</span>.
+        </p>
+      </div>
+
+      {installedNotice && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center space-x-2">
+          <Check className="w-5 h-5 flex-shrink-0" />
+          <span>{installedNotice}</span>
+        </div>
+      )}
+
+      {/* SECTION 1: VANILLA */}
+      {renderLoaderGroup(
+        '1. Mục Minecraft Vanilla (Gốc)',
+        'Phiên bản thuần nguyên bản chính thức từ Mojang Studios.',
+        <Box size={20} />,
+        vanillaLoaders,
+        '#10b981'
+      )}
+
+      {/* SECTION 2: FORGE & NEOFORGE */}
+      {renderLoaderGroup(
+        '2. Mục Hệ Sinh Thái Forge & NeoForge',
+        'Nền tảng Mod loader truyền thống hỗ trợ hàng ngàn Modpack phong phú.',
+        <Hammer size={20} />,
+        forgeLoaders,
+        '#f59e0b'
+      )}
+
+      {/* SECTION 3: FABRIC & IRIS SHADERS */}
+      {renderLoaderGroup(
+        '3. Mục Hệ Sinh Thái Fabric & Iris Shaders',
+        'Nền tảng siêu nhẹ tối ưu FPS cao kết hợp công nghệ Render Shaders thế hệ mới.',
+        <Zap size={20} />,
+        fabricLoaders,
+        '#3b82f6'
+      )}
     </div>
   );
 };
