@@ -80,7 +80,7 @@ function formatEta(seconds?: number): string {
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Tab = "home" | "versions" | "mods" | "account" | "settings";
-type LoaderType = "vanilla" | "fabric" | "forge" | "neoforge" | "quilt" | "iris";
+type LoaderType = "vanilla" | "forge" | "fabric" | "neoforge" | "optifine" | "iris" | "quilt";
 type CategoryType = "all" | "modpack" | "mod" | "resourcepack" | "shader";
 type VersionSubTab = "downloaded" | LoaderType;
 
@@ -116,12 +116,13 @@ interface DownloadProgressPayload {
 
 /* ─── Loader Metadata (Standard Minecraft Classifications) ───────────────────────── */
 const LOADER_META: Record<LoaderType, { emoji: string; color: string; bg: string; label: string }> = {
-  vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla & OptiFine" },
-  fabric:   { emoji: "⚡", color: "#d97706", bg: "rgba(245,158,11,0.15)",  label: "Fabric"             },
-  forge:    { emoji: "🔨", color: "#dc2626", bg: "rgba(239,68,68,0.15)",  label: "Forge & OptiForge"  },
-  neoforge: { emoji: "🛡️", color: "#10b981", bg: "rgba(16,185,129,0.15)",  label: "NeoForge"           },
-  quilt:    { emoji: "🪶", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)",  label: "Quilt Loader"       },
-  iris:     { emoji: "✦",  color: "#06b6d4", bg: "rgba(6,182,212,0.15)",   label: "Iris Shaders"       },
+  vanilla:  { emoji: "📦", color: "#6366f1", bg: "rgba(99,102,241,0.15)",  label: "Vanilla"      },
+  forge:    { emoji: "🔨", color: "#dc2626", bg: "rgba(239,68,68,0.15)",  label: "Forge"        },
+  fabric:   { emoji: "⚡", color: "#d97706", bg: "rgba(245,158,11,0.15)",  label: "Fabric"       },
+  neoforge: { emoji: "🛡️", color: "#10b981", bg: "rgba(16,185,129,0.15)",  label: "NeoForge"     },
+  optifine: { emoji: "🔍", color: "#ec4899", bg: "rgba(236,72,153,0.15)",  label: "OptiFine"     },
+  quilt:    { emoji: "🪶", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)",  label: "Quilt Loader" },
+  iris:     { emoji: "✦",  color: "#06b6d4", bg: "rgba(6,182,212,0.15)",   label: "Iris Shaders" },
 };
 
 const SERVERS = [
@@ -323,7 +324,7 @@ export function App() {
           id: `${v.id}-optifine`,
           label: `${v.id} OptiFine HD`,
           sub: "OptiFine Standalone FPS Booster",
-          loader: "vanilla" as LoaderType,
+          loader: "optifine" as LoaderType,
           versionStr: v.id,
           isInstalled: isVersionInstalledOnDisk(`${v.id}-optifine`, realDiskIds),
         }));
@@ -376,6 +377,7 @@ export function App() {
             if (lower.includes("fabric")) loader = "fabric";
             else if (lower.includes("neoforge")) loader = "neoforge";
             else if (lower.includes("forge")) loader = "forge";
+            else if (lower.includes("optifine")) loader = "optifine";
             else if (lower.includes("quilt")) loader = "quilt";
             else if (lower.includes("iris")) loader = "iris";
 
@@ -751,6 +753,7 @@ export function App() {
     if (lower.includes("fabric")) loader = "fabric";
     else if (lower.includes("neoforge")) loader = "neoforge";
     else if (lower.includes("forge")) loader = "forge";
+    else if (lower.includes("optifine")) loader = "optifine";
     else if (lower.includes("quilt")) loader = "quilt";
     else if (lower.includes("iris")) loader = "iris";
 
@@ -1023,11 +1026,12 @@ export function App() {
               {([
                 { id: "downloaded", emoji: "💾", color: "#10b981", bg: "rgba(16,185,129,0.15)", label: "Downloaded" },
                 { id: "vanilla",  ...LOADER_META.vanilla },
-                { id: "fabric",   ...LOADER_META.fabric },
                 { id: "forge",    ...LOADER_META.forge },
+                { id: "fabric",   ...LOADER_META.fabric },
                 { id: "neoforge", ...LOADER_META.neoforge },
-                { id: "quilt",    ...LOADER_META.quilt },
+                { id: "optifine", ...LOADER_META.optifine },
                 { id: "iris",     ...LOADER_META.iris },
+                { id: "quilt",    ...LOADER_META.quilt },
               ] as { id: VersionSubTab; emoji: string; color: string; bg: string; label: string }[]).map((tabItem) => {
                 const isActive = versionTabLoader === tabItem.id;
                 return (
