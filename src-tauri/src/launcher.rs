@@ -160,6 +160,48 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
     final_jars
 }
 
+use std::fs::File;
+use zip::ZipArchive;
+
+fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
+    let natives_dir = game_dir.join("versions").join(version_id).join("natives");
+    fs::create_dir_all(&natives_dir).ok();
+
+    let libraries_dir = game_dir.join("libraries");
+    if libraries_dir.exists() {
+        let mut all_jars = Vec::new();
+        collect_jars_recursive(&libraries_dir, &mut all_jars);
+        for jar_path_str in all_jars {
+            let p = Path::new(&jar_path_str);
+            let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if file_name.contains("natives") {
+                if let Ok(file) = File::open(p) {
+                    if let Ok(mut archive) = ZipArchive::new(file) {
+                        for i in 0..archive.len() {
+                            if let Ok(mut entry) = archive.by_index(i) {
+                                if let Some(name) = entry.enclosed_name() {
+                                    let ext = name.extension().and_then(|s| s.to_str()).unwrap_or("");
+                                    if ext == "dll" || ext == "so" || ext == "dylib" {
+                                        if let Some(target_filename) = name.file_name() {
+                                            let out_path = natives_dir.join(target_filename);
+                                            if !out_path.exists() {
+                                                if let Ok(mut out_file) = File::create(&out_path) {
+                                                    std::io::copy(&mut entry, &mut out_file).ok();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    natives_dir
+}
+
 pub fn launch_game(
     version_id: &str,
     account: &Account,
@@ -196,6 +238,10 @@ pub fn launch_game(
 
     let min_ram_arg = format!("-Xms{}M", config.min_ram_mb);
     let max_ram_arg = format!("-Xmx{}M", config.max_ram_mb);
+
+    // Trích xuất Native DLLs của LWJGL cho Windows
+    let natives_dir = extract_natives(&game_dir, version_id);
+    let natives_path_str = natives_dir.to_string_lossy().to_string();
 
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
@@ -266,6 +312,8 @@ pub fn launch_game(
     let mut args: Vec<String> = vec![
         min_ram_arg,
         max_ram_arg,
+        format!("-Djava.library.path={}", natives_path_str),
+        format!("-Dorg.lwjgl.librarypath={}", natives_path_str),
     ];
 
     if !config.jvm_args.trim().is_empty() {
