@@ -138,7 +138,21 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         }
     }
 
+    // Dọn dẹp DataFixerUpper 10.0.21 nếu có - bản 10.x đổi signature Codec.unit() gây NoSuchMethodError
+    let dfu_dir = libraries_dir.join("com").join("mojang").join("datafixerupper");
+    if dfu_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&dfu_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("10.") {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+
     let core_libs = vec![
+        ("com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar", "https://libraries.minecraft.net/com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar"),
         ("com/mojang/authlib/6.0.54/authlib-6.0.54.jar", "https://libraries.minecraft.net/com/mojang/authlib/6.0.54/authlib-6.0.54.jar"),
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
         ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),
