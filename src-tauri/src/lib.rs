@@ -110,7 +110,7 @@ async fn install_mod_loader_cmd(
 
     let _ = ensure_portable_java21_with_app(&app_handle, &game_dir).await;
 
-    install_mod_loader(&game_dir, &game_version, loader_enum, &loader_version).await
+    install_mod_loader(Some(&app_handle), &game_dir, &game_version, loader_enum, &loader_version).await
 }
 
 #[tauri::command]
@@ -151,7 +151,7 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
             _ => ModLoaderType::Vanilla,
         };
 
-        let _ = install_mod_loader(&final_config.game_dir, game_ver_str, loader_enum, "latest").await;
+        let _ = install_mod_loader(Some(&app_handle), &final_config.game_dir, game_ver_str, loader_enum, "latest").await;
     }
 
     let _ = ensure_required_asm_libraries(&final_config.game_dir).await;
