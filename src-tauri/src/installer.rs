@@ -570,12 +570,22 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
     let client_jar = target_dir.join(format!("{}.jar", version_id));
     let json_path = target_dir.join(format!("{}.json", version_id));
 
+    let target_mojang_ver = if game_version.starts_with("26.") {
+        "1.21.1"
+    } else {
+        game_version
+    };
+
     // 2. Tải version manifest json nếu chưa có
     let manifest = crate::version_manifest::fetch_vanilla_versions().await.ok();
     let mut client_download_url: Option<String> = None;
 
     if let Some(m) = manifest {
-        if let Some(v_item) = m.versions.iter().find(|v| v.id == game_version) {
+        let v_item_opt = m.versions.iter().find(|v| v.id == game_version)
+            .or_else(|| m.versions.iter().find(|v| v.id == target_mojang_ver))
+            .or_else(|| m.versions.iter().find(|v| v.id == "1.21.1"));
+
+        if let Some(v_item) = v_item_opt {
             if let Ok(res) = reqwest::get(&v_item.url).await {
                 if let Ok(text) = res.text().await {
                     let _ = fs::write(&json_path, &text);
@@ -587,24 +597,25 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
         }
     }
 
-    // 3. Tải Client Jar nếu chưa có hoặc < 10MB
+    // 3. Tải Client Jar nếu chưa có hoặc < 20MB (file chuẩn của Mojang ~30MB)
     let current_size = fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0);
-    let need_download = !client_jar.exists() || current_size < 10_000_000;
+    let need_download = !client_jar.exists() || current_size < 20_000_000;
 
     if need_download {
+        let _ = fs::remove_file(&client_jar); // Xóa file lỗi/rỗng cũ nếu có
         let display_name = format!("Minecraft {} Client", game_version);
         let mut downloaded = false;
 
         if let Some(ref url) = client_download_url {
             if let Some(app) = app_handle {
                 if download_file_with_progress(app, url, &client_jar, &display_name).await.is_ok() {
-                    if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 10_000_000 {
+                    if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000 {
                         downloaded = true;
                     }
                 }
             } else {
                 if verify_and_download_file(url, &client_jar, None).await.is_ok() {
-                    if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 10_000_000 {
+                    if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000 {
                         downloaded = true;
                     }
                 }
@@ -613,18 +624,19 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
 
         if !downloaded {
             let mirror_urls = vec![
-                format!("https://bmclapi2.bangbang93.com/version/{}/client", game_version),
                 "https://piston-data.mojang.com/v1/objects/45068820c7e2b694b8e21fdf164906f0e4b8ed6c/client.jar".to_string(),
+                format!("https://bmclapi2.bangbang93.com/version/{}/client", target_mojang_ver),
                 "https://bmclapi2.bangbang93.com/version/1.21.1/client".to_string(),
             ];
 
             for u in mirror_urls {
+                let _ = fs::remove_file(&client_jar);
                 if let Some(app) = app_handle {
                     let _ = download_file_with_progress(app, &u, &client_jar, &display_name).await;
                 } else {
                     let _ = verify_and_download_file(&u, &client_jar, None).await;
                 }
-                if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 10_000_000 {
+                if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000 {
                     break;
                 }
             }

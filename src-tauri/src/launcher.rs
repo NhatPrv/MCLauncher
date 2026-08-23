@@ -214,17 +214,31 @@ pub fn launch_game(
     let version_dir = game_dir.join("versions").join(version_id);
     let client_jar = version_dir.join(format!("{}.jar", version_id));
 
-    // Fallback sang vanilla jar nếu bản mod loader chưa tạo jar riêng
-    let actual_jar = if client_jar.exists() {
+    // Fallback sang vanilla jar nếu bản mod loader chưa tạo jar riêng hoặc file jar hiện tại < 20MB
+    let is_valid_jar = |p: &Path| -> bool {
+        p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) >= 20_000_000
+    };
+
+    let actual_jar = if is_valid_jar(&client_jar) {
         client_jar
     } else {
         let vanilla_id = version_id.split('-').next().unwrap_or(version_id);
-        game_dir.join("versions").join(vanilla_id).join(format!("{}.jar", vanilla_id))
+        let van_jar = game_dir.join("versions").join(vanilla_id).join(format!("{}.jar", vanilla_id));
+        if is_valid_jar(&van_jar) {
+            van_jar
+        } else {
+            let alt_jar = game_dir.join("versions").join("1.21.1").join("1.21.1.jar");
+            if is_valid_jar(&alt_jar) {
+                alt_jar
+            } else {
+                client_jar
+            }
+        }
     };
 
-    if !actual_jar.exists() {
+    if !actual_jar.exists() || fs::metadata(&actual_jar).map(|m| m.len()).unwrap_or(0) < 20_000_000 {
         return Err(format!(
-            "Không tìm thấy file game jar tại: '{}'. Vui lòng bấm nút 'Tải về' trên giao diện!",
+            "File Minecraft Client jar tại '{}' chưa đầy đủ (cần ~30MB). Vui lòng bấm nút 'Tải về' hoặc bấm 'Play' để tự động tải lại file chuẩn của Mojang!",
             actual_jar.display()
         ));
     }
