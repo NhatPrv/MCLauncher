@@ -151,8 +151,23 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         }
     }
 
+    // Dọn dẹp tất cả các phiên bản text2speech khác 1.17.9 (như 1.19.12 bị mất hàm Narrator.say(String, boolean))
+    let t2s_dir = libraries_dir.join("com").join("mojang").join("text2speech");
+    if t2s_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&t2s_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name != "1.17.9" {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+
     let core_libs = vec![
         ("com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar", "https://libraries.minecraft.net/com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar"),
+        ("com/mojang/text2speech/1.17.9/text2speech-1.17.9.jar", "https://libraries.minecraft.net/com/mojang/text2speech/1.17.9/text2speech-1.17.9.jar"),
+        ("com/mojang/text2speech/1.17.9/text2speech-1.17.9-natives-windows.jar", "https://libraries.minecraft.net/com/mojang/text2speech/1.17.9/text2speech-1.17.9-natives-windows.jar"),
         ("com/mojang/authlib/6.0.54/authlib-6.0.54.jar", "https://libraries.minecraft.net/com/mojang/authlib/6.0.54/authlib-6.0.54.jar"),
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
         ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),

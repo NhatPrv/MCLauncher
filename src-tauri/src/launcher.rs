@@ -285,6 +285,19 @@ pub fn launch_game(
         }
     }
 
+    // Dọn dẹp tất cả các phiên bản text2speech khác 1.17.9 (như 1.19.12 gây NoSuchMethodError Narrator.say)
+    let t2s_dir = game_dir.join("libraries").join("com").join("mojang").join("text2speech");
+    if t2s_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&t2s_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name != "1.17.9" {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
