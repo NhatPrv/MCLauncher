@@ -123,10 +123,13 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
         final_config.java_path = portable_java;
     }
 
-    // Tự động cài đặt phiên bản nếu thư mục phiên bản chưa tồn tại trên đĩa cứng
+    // Tự động cài đặt/tải lại phiên bản nếu thư mục chưa tồn tại hoặc file client.jar < 20MB
     let game_dir_path = std::path::PathBuf::from(&final_config.game_dir);
     let target_version_dir = game_dir_path.join("versions").join(&version_id);
-    if !target_version_dir.exists() {
+    let client_jar = target_version_dir.join(format!("{}.jar", version_id));
+    let jar_size = std::fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0);
+
+    if !target_version_dir.exists() || jar_size < 20_000_000 {
         let game_ver_str = version_id.split('-').next().unwrap_or(&version_id);
         let loader_name = if version_id.contains("iris") {
             "iris"
@@ -136,6 +139,8 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
             "quilt"
         } else if version_id.contains("forge") {
             "forge"
+        } else if version_id.contains("neoforge") {
+            "neoforge"
         } else if version_id.contains("optifine") {
             "optifine"
         } else {
@@ -146,6 +151,7 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
             "fabric" => ModLoaderType::Fabric,
             "forge" => ModLoaderType::Forge,
             "quilt" => ModLoaderType::Quilt,
+            "neoforge" => ModLoaderType::NeoForge,
             "optifine" => ModLoaderType::OptiFine,
             "iris" => ModLoaderType::Iris,
             _ => ModLoaderType::Vanilla,
