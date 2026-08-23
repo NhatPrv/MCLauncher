@@ -257,6 +257,19 @@ pub fn launch_game(
     let natives_dir = extract_natives(&game_dir, version_id);
     let natives_path_str = natives_dir.to_string_lossy().to_string();
 
+    // Dọn dẹp tất cả các phiên bản DFU khác 8.0.16 (như 9.0.19, 10.x gây NoSuchMethodError Codec.unit)
+    let dfu_dir = game_dir.join("libraries").join("com").join("mojang").join("datafixerupper");
+    if dfu_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&dfu_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name != "8.0.16" {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
     let version_libs = collect_libraries_for_version(&game_dir, version_id);

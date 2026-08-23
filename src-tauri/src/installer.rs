@@ -138,13 +138,13 @@ pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String>
         }
     }
 
-    // Dọn dẹp DataFixerUpper 10.0.21 nếu có - bản 10.x đổi signature Codec.unit() gây NoSuchMethodError
+    // Dọn dẹp tất cả các phiên bản DataFixerUpper khác 8.0.16 (như 9.0.19, 10.x đổi signature Codec.unit gây NoSuchMethodError)
     let dfu_dir = libraries_dir.join("com").join("mojang").join("datafixerupper");
     if dfu_dir.exists() {
         if let Ok(entries) = fs::read_dir(&dfu_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("10.") {
+                if name != "8.0.16" {
                     let _ = fs::remove_dir_all(entry.path());
                 }
             }
