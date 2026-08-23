@@ -165,7 +165,9 @@ use zip::ZipArchive;
 
 fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
     let natives_dir = game_dir.join("versions").join(version_id).join("natives");
-    fs::create_dir_all(&natives_dir).ok();
+    // Xóa sạch thư mục natives cũ để loại bỏ file dll ARM64 bị giải nén nhầm trước đó
+    let _ = fs::remove_dir_all(&natives_dir);
+    let _ = fs::create_dir_all(&natives_dir);
 
     let libraries_dir = game_dir.join("libraries");
     if libraries_dir.exists() {
@@ -174,20 +176,33 @@ fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
         for jar_path_str in all_jars {
             let p = Path::new(&jar_path_str);
             let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            if file_name.contains("natives") {
+            let file_name_lower = file_name.to_lowercase();
+            
+            // Chỉ giải nén từ các file natives của Windows x64 (loại bỏ hoàn toàn ARM64, Linux, MacOS, x86_32)
+            if file_name_lower.contains("natives")
+                && (file_name_lower.contains("windows") || !file_name_lower.contains("linux") && !file_name_lower.contains("macos") && !file_name_lower.contains("osx"))
+                && !file_name_lower.contains("arm64")
+                && !file_name_lower.contains("aarch64")
+                && !file_name_lower.contains("arm32")
+                && !file_name_lower.contains("x86-32")
+                && !file_name_lower.contains("x86_32")
+            {
                 if let Ok(file) = File::open(p) {
                     if let Ok(mut archive) = ZipArchive::new(file) {
                         for i in 0..archive.len() {
                             if let Ok(mut entry) = archive.by_index(i) {
                                 if let Some(name) = entry.enclosed_name() {
+                                    let path_str = name.to_string_lossy().to_lowercase();
+                                    // Bỏ qua các entry thuộc thư mục arm64/aarch64/x86 bên trong jar
+                                    if path_str.contains("arm64") || path_str.contains("aarch64") || path_str.contains("arm32") || path_str.contains("x86/") {
+                                        continue;
+                                    }
                                     let ext = name.extension().and_then(|s| s.to_str()).unwrap_or("");
                                     if ext == "dll" || ext == "so" || ext == "dylib" {
                                         if let Some(target_filename) = name.file_name() {
                                             let out_path = natives_dir.join(target_filename);
-                                            if !out_path.exists() {
-                                                if let Ok(mut out_file) = File::create(&out_path) {
-                                                    std::io::copy(&mut entry, &mut out_file).ok();
-                                                }
+                                            if let Ok(mut out_file) = File::create(&out_path) {
+                                                std::io::copy(&mut entry, &mut out_file).ok();
                                             }
                                         }
                                     }
