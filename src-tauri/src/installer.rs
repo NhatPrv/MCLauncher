@@ -723,6 +723,63 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
             let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
+
+            let target_mojang_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+            let json_path = target_dir.join(format!("{}.json", version_id));
+
+            let actual_forge_ver = if loader_version == "latest" || loader_version.is_empty() {
+                if target_mojang_ver == "1.21.1" { "51.0.33" }
+                else if target_mojang_ver == "1.20.1" { "47.3.0" }
+                else if target_mojang_ver == "1.19.2" { "43.3.0" }
+                else if target_mojang_ver == "1.16.5" { "36.2.39" }
+                else { "51.0.33" }
+            } else {
+                loader_version
+            };
+
+            let full_ver = format!("{}-{}", target_mojang_ver, actual_forge_ver);
+            let mirror_url = format!(
+                "https://bmclapi2.bangbang93.com/forge/download?mcversion={}&version={}&category=installer&format=jar",
+                target_mojang_ver, actual_forge_ver
+            );
+            let primary_url = format!(
+                "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
+                full_ver, full_ver
+            );
+
+            let temp_installer = target_dir.join(format!("forge-{}-installer.jar", actual_forge_ver));
+            let display_name = format!("Forge {}", full_ver);
+            
+            let mut downloaded = false;
+            if let Some(app) = app_handle {
+                let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+            } else {
+                let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+            }
+            if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                downloaded = true;
+            } else {
+                let _ = verify_and_download_file(&primary_url, &temp_installer, None).await;
+                if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                    downloaded = true;
+                }
+            }
+
+            if downloaded {
+                if let Ok(file) = File::open(&temp_installer) {
+                    if let Ok(mut archive) = ZipArchive::new(file) {
+                        if let Ok(mut entry) = archive.by_name("version.json") {
+                            let mut content = String::new();
+                            if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                let _ = fs::write(&json_path, &content);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
+            let _ = ensure_version_libraries_downloaded(game_dir, target_mojang_ver).await;
             Ok(version_id)
         }
         ModLoaderType::Quilt => {
@@ -765,6 +822,62 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
             let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
+
+            let target_mojang_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+            let json_path = target_dir.join(format!("{}.json", version_id));
+
+            let actual_neo_ver = if loader_version == "latest" || loader_version.is_empty() {
+                if target_mojang_ver == "1.21.1" { "21.1.134" }
+                else if target_mojang_ver == "1.21" { "21.0.167" }
+                else if target_mojang_ver == "1.20.6" { "20.6.119" }
+                else if target_mojang_ver == "1.20.4" { "20.4.237" }
+                else { "21.1.134" }
+            } else {
+                loader_version
+            };
+
+            let installer_url = format!(
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{}/neoforge-{}-installer.jar",
+                actual_neo_ver, actual_neo_ver
+            );
+            let mirror_url = format!(
+                "https://bmclapi2.bangbang93.com/neoforge/version/{}/download/installer.jar",
+                actual_neo_ver
+            );
+
+            let temp_installer = target_dir.join(format!("neoforge-{}-installer.jar", actual_neo_ver));
+            let display_name = format!("NeoForge {}", actual_neo_ver);
+            
+            let mut downloaded = false;
+            if let Some(app) = app_handle {
+                let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+            } else {
+                let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+            }
+            if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                downloaded = true;
+            } else {
+                let _ = verify_and_download_file(&installer_url, &temp_installer, None).await;
+                if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                    downloaded = true;
+                }
+            }
+
+            if downloaded {
+                if let Ok(file) = File::open(&temp_installer) {
+                    if let Ok(mut archive) = ZipArchive::new(file) {
+                        if let Ok(mut entry) = archive.by_name("version.json") {
+                            let mut content = String::new();
+                            if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                let _ = fs::write(&json_path, &content);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
+            let _ = ensure_version_libraries_downloaded(game_dir, target_mojang_ver).await;
             Ok(version_id)
         }
         ModLoaderType::OptiFine => {
