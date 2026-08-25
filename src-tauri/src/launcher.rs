@@ -306,6 +306,9 @@ pub fn launch_game(
     // Nạp bổ sung các thư viện cốt lõi cho Fabric/KnotClient nếu chưa có trong Profile JSON
     // Quét cụ thể từng thư viện riêng lẻ, KHÔNG quét toàn bộ net/fabricmc/ để tránh trùng fabric-loader.jar
     let extra_lib_dirs = vec![
+        game_dir.join("libraries").join("cpw"),
+        game_dir.join("libraries").join("net").join("neoforged"),
+        game_dir.join("libraries").join("net").join("minecraftforge"),
         game_dir.join("libraries").join("org").join("ow2").join("asm"),
         game_dir.join("libraries").join("net").join("fabricmc").join("sponge-mixin"),
         game_dir.join("libraries").join("org").join("spongepowered"),

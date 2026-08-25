@@ -57,7 +57,7 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
 
     let base_url = if parts[0].contains("fabricmc") {
         "https://maven.fabricmc.net"
-    } else if parts[0].contains("neoforged") {
+    } else if parts[0].contains("neoforged") || parts[0].contains("cpw") || parts[0].contains("modlauncher") || parts[0].contains("securejarhandler") {
         "https://maven.neoforged.net/releases"
     } else if parts[0].contains("minecraftforge") {
         "https://files.minecraftforge.net/maven"
@@ -768,10 +768,28 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             if downloaded {
                 if let Ok(file) = File::open(&temp_installer) {
                     if let Ok(mut archive) = ZipArchive::new(file) {
-                        if let Ok(mut entry) = archive.by_name("version.json") {
-                            let mut content = String::new();
-                            if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
-                                let _ = fs::write(&json_path, &content);
+                        for i in 0..archive.len() {
+                            if let Ok(mut entry) = archive.by_index(i) {
+                                if let Some(enclosed) = entry.enclosed_name() {
+                                    let name_str = enclosed.to_string_lossy().to_string();
+                                    if name_str == "version.json" {
+                                        let mut content = String::new();
+                                        if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                            let _ = fs::write(&json_path, &content);
+                                        }
+                                    } else if name_str.starts_with("maven/") {
+                                        let rel_lib = name_str.trim_start_matches("maven/");
+                                        let target_lib_path = PathBuf::from(game_dir).join("libraries").join(rel_lib);
+                                        if !target_lib_path.exists() {
+                                            if let Some(parent) = target_lib_path.parent() {
+                                                let _ = fs::create_dir_all(parent);
+                                            }
+                                            if let Ok(mut out) = File::create(&target_lib_path) {
+                                                let _ = std::io::copy(&mut entry, &mut out);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -866,10 +884,28 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             if downloaded {
                 if let Ok(file) = File::open(&temp_installer) {
                     if let Ok(mut archive) = ZipArchive::new(file) {
-                        if let Ok(mut entry) = archive.by_name("version.json") {
-                            let mut content = String::new();
-                            if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
-                                let _ = fs::write(&json_path, &content);
+                        for i in 0..archive.len() {
+                            if let Ok(mut entry) = archive.by_index(i) {
+                                if let Some(enclosed) = entry.enclosed_name() {
+                                    let name_str = enclosed.to_string_lossy().to_string();
+                                    if name_str == "version.json" {
+                                        let mut content = String::new();
+                                        if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                            let _ = fs::write(&json_path, &content);
+                                        }
+                                    } else if name_str.starts_with("maven/") {
+                                        let rel_lib = name_str.trim_start_matches("maven/");
+                                        let target_lib_path = PathBuf::from(game_dir).join("libraries").join(rel_lib);
+                                        if !target_lib_path.exists() {
+                                            if let Some(parent) = target_lib_path.parent() {
+                                                let _ = fs::create_dir_all(parent);
+                                            }
+                                            if let Ok(mut out) = File::create(&target_lib_path) {
+                                                let _ = std::io::copy(&mut entry, &mut out);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
