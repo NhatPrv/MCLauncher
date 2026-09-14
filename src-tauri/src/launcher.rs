@@ -16,6 +16,8 @@ struct LibraryNameItem {
 struct VersionManifestJson {
     #[serde(rename = "mainClass")]
     main_class: Option<String>,
+    #[serde(rename = "inheritsFrom")]
+    inherits_from: Option<String>,
     libraries: Option<Vec<LibraryNameItem>>,
 }
 
@@ -95,17 +97,29 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
     let libraries_dir = game_dir.join("libraries");
     let mut manifest_jars = Vec::new();
 
-    let versions_to_check = vec![
+    let mut versions_to_check = vec![
         version_id.to_string(),
         version_id.split('-').next().unwrap_or(version_id).to_string(),
     ];
+    if version_id.starts_with("26.") {
+        versions_to_check.push("1.21.1".to_string());
+    }
 
-    // 1. Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON
-    for ver in versions_to_check {
+    // 1. Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON (hỗ trợ kế thừa inheritsFrom)
+    let mut checked_set = std::collections::HashSet::new();
+    while let Some(ver) = versions_to_check.pop() {
+        if !checked_set.insert(ver.clone()) {
+            continue;
+        }
         let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
         if json_path.exists() {
             if let Ok(content) = fs::read_to_string(&json_path) {
                 if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                    if let Some(parent_ver) = parsed.inherits_from {
+                        if !parent_ver.trim().is_empty() {
+                            versions_to_check.push(parent_ver);
+                        }
+                    }
                     if let Some(libs) = parsed.libraries {
                         for lib_item in libs {
                             if let Some(maven_name) = lib_item.name {
@@ -178,33 +192,22 @@ fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
             let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
             let file_name_lower = file_name.to_lowercase();
             
-            // Chỉ giải nén từ các file natives của Windows x64 (loại bỏ hoàn toàn ARM64, Linux, MacOS, x86_32)
-            if file_name_lower.contains("natives")
-                && (file_name_lower.contains("windows") || !file_name_lower.contains("linux") && !file_name_lower.contains("macos") && !file_name_lower.contains("osx"))
-                && !file_name_lower.contains("arm64")
+            let is_native = (file_name_lower.contains("natives-windows") || file_name_lower.contains("natives_windows"))
+                && !file_name_lower.contains("arm")
                 && !file_name_lower.contains("aarch64")
-                && !file_name_lower.contains("arm32")
-                && !file_name_lower.contains("x86-32")
                 && !file_name_lower.contains("x86_32")
-            {
+                && !file_name_lower.contains("i686");
+
+            if is_native {
                 if let Ok(file) = File::open(p) {
                     if let Ok(mut archive) = ZipArchive::new(file) {
                         for i in 0..archive.len() {
                             if let Ok(mut entry) = archive.by_index(i) {
-                                if let Some(name) = entry.enclosed_name() {
-                                    let path_str = name.to_string_lossy().to_lowercase();
-                                    // Bỏ qua các entry thuộc thư mục arm64/aarch64/x86 bên trong jar
-                                    if path_str.contains("arm64") || path_str.contains("aarch64") || path_str.contains("arm32") || path_str.contains("x86/") {
-                                        continue;
-                                    }
-                                    let ext = name.extension().and_then(|s| s.to_str()).unwrap_or("");
-                                    if ext == "dll" || ext == "so" || ext == "dylib" {
-                                        if let Some(target_filename) = name.file_name() {
-                                            let out_path = natives_dir.join(target_filename);
-                                            if let Ok(mut out_file) = File::create(&out_path) {
-                                                std::io::copy(&mut entry, &mut out_file).ok();
-                                            }
-                                        }
+                                let name = entry.name().to_string();
+                                if name.ends_with(".dll") && !name.contains('/') && !name.contains('\\') {
+                                    let target_dll = natives_dir.join(&name);
+                                    if let Ok(mut out) = File::create(&target_dll) {
+                                        let _ = std::io::copy(&mut entry, &mut out);
                                     }
                                 }
                             }
@@ -214,6 +217,7 @@ fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
             }
         }
     }
+
     natives_dir
 }
 
@@ -224,27 +228,26 @@ pub fn launch_game(
 ) -> Result<u32, String> {
     let game_dir = PathBuf::from(&config.game_dir);
     let assets_dir = game_dir.join("assets");
+    let version_dir = game_dir.join("versions").join(version_id);
     
     // Tự động tìm Client Jar thích hợp
-    let version_dir = game_dir.join("versions").join(version_id);
     let client_jar = version_dir.join(format!("{}.jar", version_id));
 
     // Fallback sang vanilla jar nếu bản mod loader chưa tạo jar riêng hoặc file jar hiện tại < 20MB
-    let is_valid_jar = |p: &Path| -> bool {
-        p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) >= 20_000_000
-    };
-
-    let actual_jar = if is_valid_jar(&client_jar) {
+    let actual_jar = if client_jar.exists() && fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) >= 20_000_000 {
         client_jar
     } else {
-        let vanilla_id = version_id.split('-').next().unwrap_or(version_id);
-        let van_jar = game_dir.join("versions").join(vanilla_id).join(format!("{}.jar", vanilla_id));
-        if is_valid_jar(&van_jar) {
-            van_jar
+        let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
+        let fallback = game_dir
+            .join("versions")
+            .join(vanilla_ver)
+            .join(format!("{}.jar", vanilla_ver));
+        if fallback.exists() && fs::metadata(&fallback).map(|m| m.len()).unwrap_or(0) >= 20_000_000 {
+            fallback
         } else {
-            let alt_jar = game_dir.join("versions").join("1.21.1").join("1.21.1.jar");
-            if is_valid_jar(&alt_jar) {
-                alt_jar
+            let direct_1211 = game_dir.join("versions").join("1.21.1").join("1.21.1.jar");
+            if direct_1211.exists() && fs::metadata(&direct_1211).map(|m| m.len()).unwrap_or(0) >= 20_000_000 {
+                direct_1211
             } else {
                 client_jar
             }
@@ -298,13 +301,31 @@ pub fn launch_game(
         }
     }
 
+    // Dọn dẹp tất cả các phiên bản Netty >= 4.2 hoặc 5.x (gây IllegalArgumentException: IoHandle trong Singleplayer)
+    let netty_dir = game_dir.join("libraries").join("io").join("netty");
+    if netty_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&netty_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    if let Ok(ver_entries) = fs::read_dir(entry.path()) {
+                        for ver_entry in ver_entries.flatten() {
+                            let ver_name = ver_entry.file_name().to_string_lossy().to_string();
+                            if ver_name.starts_with("4.2.") || ver_name.starts_with("5.") {
+                                let _ = fs::remove_dir_all(ver_entry.path());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp bổ sung các thư viện cốt lõi cho Fabric/KnotClient nếu chưa có trong Profile JSON
-    // Quét cụ thể từng thư viện riêng lẻ, KHÔNG quét toàn bộ net/fabricmc/ để tránh trùng fabric-loader.jar
+    // Nạp bổ sung các thư viện cốt lõi cho Fabric/KnotClient/NeoForge nếu chưa có trong Profile JSON
     let extra_lib_dirs = vec![
         game_dir.join("libraries").join("cpw"),
         game_dir.join("libraries").join("net").join("neoforged"),
@@ -318,7 +339,6 @@ pub fn launch_game(
         game_dir.join("libraries").join("com").join("mojang").join("authlib"),
         game_dir.join("libraries").join("com").join("mojang").join("datafixerupper"),
         game_dir.join("libraries").join("com").join("google"),
-        game_dir.join("libraries").join("io").join("netty"),
         game_dir.join("libraries").join("org").join("apache"),
         game_dir.join("libraries").join("it").join("unimi"),
         game_dir.join("libraries").join("net").join("sf").join("jopt-simple"),
@@ -333,10 +353,15 @@ pub fn launch_game(
         }
     }
 
-    // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ hoàn toàn các file jar cũ như authlib-1.5.25.jar hay asm-tree-9.6.jar)
+    // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ các file xung đột)
     let mut artifact_map: std::collections::HashMap<String, Vec<PathBuf>> = std::collections::HashMap::new();
     for jar_str in jar_list {
         let p = PathBuf::from(&jar_str);
+        let s = p.to_string_lossy();
+        // Loại trừ hoàn toàn các bản Netty không tương thích (>= 4.2)
+        if (s.contains("io/netty") || s.contains("io\\netty")) && (s.contains("4.2.") || s.contains("5.")) {
+            continue;
+        }
         if let Some(parent) = p.parent() {
             if let Some(artifact_dir) = parent.parent() {
                 let key = artifact_dir.to_string_lossy().to_string();
