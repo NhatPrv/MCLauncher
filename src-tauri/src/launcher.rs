@@ -204,10 +204,21 @@ fn extract_natives(game_dir: &Path, version_id: &str) -> PathBuf {
                         for i in 0..archive.len() {
                             if let Ok(mut entry) = archive.by_index(i) {
                                 let name = entry.name().to_string();
-                                if name.ends_with(".dll") && !name.contains('/') && !name.contains('\\') {
-                                    let target_dll = natives_dir.join(&name);
-                                    if let Ok(mut out) = File::create(&target_dll) {
-                                        let _ = std::io::copy(&mut entry, &mut out);
+                                let name_lower = name.to_lowercase();
+                                if name_lower.ends_with(".dll") {
+                                    if name_lower.contains("arm64")
+                                        || name_lower.contains("aarch64")
+                                        || name_lower.contains("arm32")
+                                        || name_lower.contains("x86/")
+                                        || name_lower.contains("x86\\")
+                                    {
+                                        continue;
+                                    }
+                                    if let Some(target_filename) = Path::new(&name).file_name() {
+                                        let target_dll = natives_dir.join(target_filename);
+                                        if let Ok(mut out) = File::create(&target_dll) {
+                                            let _ = std::io::copy(&mut entry, &mut out);
+                                        }
                                     }
                                 }
                             }
