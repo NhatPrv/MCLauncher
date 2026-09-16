@@ -228,7 +228,7 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
     let libraries_dir = base_path.join("libraries");
 
     let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
-    let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string(), "1.21.1".to_string()];
+    let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string()];
 
     for ver in versions_to_check {
         let json_path = base_path.join("versions").join(&ver).join(format!("{}.json", ver));
@@ -280,7 +280,7 @@ pub async fn download_modrinth_mod_to_dir(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let target_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+    let target_ver = game_version.split('-').next().unwrap_or(game_version);
 
     let url = format!(
         "https://api.modrinth.com/v2/project/{}/version?game_versions=[\"{}\"]&loaders=[\"fabric\"]",
@@ -537,8 +537,10 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
                                 if path_segments.len() > 1 {
                                     let rel_path = path_segments[1..].join("/");
                                     let target_lib_path = libraries_dir.join(rel_path);
-                                    let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
-                                    downloaded = true;
+                                    if !target_lib_path.exists() {
+                                        let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                        downloaded = true;
+                                    }
                                 }
                             }
                         }
@@ -549,7 +551,9 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
                         if let Some(name) = &lib.name {
                             if let Some((url, rel_path)) = maven_to_url(name) {
                                 let target_lib_path = libraries_dir.join(rel_path);
-                                let _ = verify_and_download_file(&url, &target_lib_path, None).await;
+                                if !target_lib_path.exists() {
+                                    let _ = verify_and_download_file(&url, &target_lib_path, None).await;
+                                }
                             }
                         }
                     }
@@ -557,8 +561,7 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
             }
         }
     } else {
-        let fallback_url = format!("https://launcher.mojang.com/v1/objects/1.21.1/client.jar");
-        let _ = verify_and_download_file(&fallback_url, &client_jar, None).await;
+        return Err(format!("Không tìm thấy phiên bản '{}' trong danh sách của Mojang!", vanilla_ver));
     }
 
     Ok(())
@@ -566,7 +569,7 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
 
 pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
     app_handle: Option<&tauri::AppHandle<R>>,
-    _game_dir: &str,
+    game_dir: &str,
     target_dir: &Path,
     game_version: &str,
     version_id: &str,
@@ -585,39 +588,76 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
     let client_jar = target_dir.join(format!("{}.jar", version_id));
     let json_path = target_dir.join(format!("{}.json", version_id));
 
-    let target_mojang_ver = if game_version.starts_with("26.") {
-        "1.21.1"
-    } else {
-        game_version
-    };
+    let vanilla_ver = game_version.split('-').next().unwrap_or(game_version);
+    let libraries_dir = PathBuf::from(game_dir).join("libraries");
+    fs::create_dir_all(&libraries_dir).ok();
+
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .build()
+        .map_err(|e| e.to_string())?;
 
     // 2. Tải version manifest json nếu chưa có
     let manifest = crate::version_manifest::fetch_vanilla_versions().await.ok();
     let mut client_download_url: Option<String> = None;
+    let mut client_sha1: Option<String> = None;
 
     if let Some(m) = manifest {
         let v_item_opt = m.versions.iter().find(|v| v.id == game_version)
-            .or_else(|| m.versions.iter().find(|v| v.id == target_mojang_ver))
-            .or_else(|| m.versions.iter().find(|v| v.id == "1.21.1"));
+            .or_else(|| m.versions.iter().find(|v| v.id == vanilla_ver));
 
         if let Some(v_item) = v_item_opt {
-            if let Ok(res) = reqwest::get(&v_item.url).await {
+            if let Ok(res) = client.get(&v_item.url).send().await {
                 if let Ok(text) = res.text().await {
                     let _ = fs::write(&json_path, &text);
                     if let Ok(pkg) = serde_json::from_str::<VersionPackageJson>(&text) {
                         client_download_url = Some(pkg.downloads.client.url);
+                        client_sha1 = pkg.downloads.client.sha1;
+
+                        if let Some(libs) = pkg.libraries {
+                            for lib in libs {
+                                let mut downloaded = false;
+                                if let Some(downloads) = &lib.downloads {
+                                    if let Some(artifact) = &downloads.artifact {
+                                        let lib_url = &artifact.url;
+                                        if let Ok(url_parsed) = reqwest::Url::parse(lib_url) {
+                                            let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
+                                            if path_segments.len() > 1 {
+                                                let rel_path = path_segments[1..].join("/");
+                                                let target_lib_path = libraries_dir.join(rel_path);
+                                                if !target_lib_path.exists() {
+                                                    let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                                    downloaded = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !downloaded {
+                                    if let Some(name) = &lib.name {
+                                        if let Some((url, rel_path)) = maven_to_url(name) {
+                                            let target_lib_path = libraries_dir.join(rel_path);
+                                            if !target_lib_path.exists() {
+                                                let _ = verify_and_download_file(&url, &target_lib_path, None).await;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // 3. Tải Client Jar nếu chưa có hoặc < 20MB (file chuẩn của Mojang ~30MB)
+    // 3. Tải Client Jar nếu chưa có hoặc < 20MB
     let current_size = fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0);
     let need_download = !client_jar.exists() || current_size < 20_000_000;
 
     if need_download {
-        let _ = fs::remove_file(&client_jar); // Xóa file lỗi/rỗng cũ nếu có
+        let _ = fs::remove_file(&client_jar);
         let display_name = format!("Minecraft {} Client", game_version);
         let mut downloaded = false;
 
@@ -629,7 +669,7 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
                     }
                 }
             } else {
-                if verify_and_download_file(url, &client_jar, None).await.is_ok() {
+                if verify_and_download_file(url, &client_jar, client_sha1.as_deref()).await.is_ok() {
                     if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000 {
                         downloaded = true;
                     }
@@ -639,9 +679,8 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
 
         if !downloaded {
             let mirror_urls = vec![
-                "https://piston-data.mojang.com/v1/objects/45068820c7e2b694b8e21fdf164906f0e4b8ed6c/client.jar".to_string(),
-                format!("https://bmclapi2.bangbang93.com/version/{}/client", target_mojang_ver),
-                "https://bmclapi2.bangbang93.com/version/1.21.1/client".to_string(),
+                format!("https://bmclapi2.bangbang93.com/version/{}/client", vanilla_ver),
+                format!("https://bmclapi2.bangbang93.com/version/{}/client", game_version),
             ];
 
             for u in mirror_urls {
@@ -652,9 +691,14 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
                     let _ = verify_and_download_file(&u, &client_jar, None).await;
                 }
                 if fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000 {
+                    downloaded = true;
                     break;
                 }
             }
+        }
+
+        if !downloaded {
+            return Err(format!("Không thể tải file Minecraft client.jar cho phiên bản '{}'!", game_version));
         }
     }
 
@@ -724,7 +768,7 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
             let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
 
-            let target_mojang_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+            let target_mojang_ver = game_version.split('-').next().unwrap_or(game_version);
             let json_path = target_dir.join(format!("{}.json", version_id));
 
             let actual_forge_ver = if loader_version == "latest" || loader_version.is_empty() {
@@ -841,7 +885,7 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
             let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
 
-            let target_mojang_ver = if game_version.starts_with("26.") { "1.21.1" } else { game_version };
+            let target_mojang_ver = game_version.split('-').next().unwrap_or(game_version);
             let json_path = target_dir.join(format!("{}.json", version_id));
 
             let actual_neo_ver = if loader_version == "latest" || loader_version.is_empty() {

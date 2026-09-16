@@ -101,9 +101,6 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
         version_id.to_string(),
         version_id.split('-').next().unwrap_or(version_id).to_string(),
     ];
-    if version_id.starts_with("26.") {
-        versions_to_check.push("1.21.1".to_string());
-    }
 
     // 1. Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON (hỗ trợ kế thừa inheritsFrom)
     let mut checked_set = std::collections::HashSet::new();
@@ -256,12 +253,7 @@ pub fn launch_game(
         if fallback.exists() && fs::metadata(&fallback).map(|m| m.len()).unwrap_or(0) >= 20_000_000 {
             fallback
         } else {
-            let direct_1211 = game_dir.join("versions").join("1.21.1").join("1.21.1.jar");
-            if direct_1211.exists() && fs::metadata(&direct_1211).map(|m| m.len()).unwrap_or(0) >= 20_000_000 {
-                direct_1211
-            } else {
-                client_jar
-            }
+            client_jar
         }
     };
 
