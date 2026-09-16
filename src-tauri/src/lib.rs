@@ -123,13 +123,14 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
         final_config.java_path = portable_java;
     }
 
-    // Tự động cài đặt/tải lại phiên bản nếu thư mục chưa tồn tại hoặc file client.jar < 20MB
+    // Tự động cài đặt/tải lại phiên bản nếu thư mục chưa tồn tại hoặc file client.jar < 20MB hoặc file json chưa có
     let game_dir_path = std::path::PathBuf::from(&final_config.game_dir);
     let target_version_dir = game_dir_path.join("versions").join(&version_id);
     let client_jar = target_version_dir.join(format!("{}.jar", version_id));
+    let version_json = target_version_dir.join(format!("{}.json", version_id));
     let jar_size = std::fs::metadata(&client_jar).map(|m| m.len()).unwrap_or(0);
 
-    if !target_version_dir.exists() || jar_size < 20_000_000 {
+    if !target_version_dir.exists() || !version_json.exists() || jar_size < 20_000_000 {
         let game_ver_str = version_id.split('-').next().unwrap_or(&version_id);
         let loader_name = if version_id.contains("iris") {
             "iris"
@@ -137,10 +138,10 @@ async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, acco
             "fabric"
         } else if version_id.contains("quilt") {
             "quilt"
-        } else if version_id.contains("forge") {
-            "forge"
         } else if version_id.contains("neoforge") {
             "neoforge"
+        } else if version_id.contains("forge") {
+            "forge"
         } else if version_id.contains("optifine") {
             "optifine"
         } else {

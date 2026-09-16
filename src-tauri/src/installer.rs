@@ -230,21 +230,61 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
     let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
     let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string()];
 
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .build()
+        .unwrap_or_default();
+
     for ver in versions_to_check {
-        let json_path = base_path.join("versions").join(&ver).join(format!("{}.json", ver));
+        let version_folder = base_path.join("versions").join(&ver);
+        let json_path = version_folder.join(format!("{}.json", ver));
+        
+        // Nếu file json chưa có trên đĩa, tự động tải từ Mojang Manifest
+        if !json_path.exists() {
+            if let Ok(manifest) = crate::version_manifest::fetch_vanilla_versions().await {
+                if let Some(v_item) = manifest.versions.iter().find(|v| v.id == ver) {
+                    if let Ok(res) = client.get(&v_item.url).send().await {
+                        if let Ok(text) = res.text().await {
+                            fs::create_dir_all(&version_folder).ok();
+                            let _ = fs::write(&json_path, &text);
+                        }
+                    }
+                }
+            }
+        }
+
         if json_path.exists() {
             if let Ok(content) = fs::read_to_string(&json_path) {
                 if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
                     if let Some(libs) = parsed.libraries {
                         for item in libs {
-                            if let Some(ref maven_name) = item.name {
-                                if let Some((url, rel_path)) = maven_to_url(maven_name) {
-                                    let local_jar = libraries_dir.join(rel_path);
-                                    if !local_jar.exists() {
-                                        let _ = verify_and_download_file(&url, &local_jar, None).await;
-                                        if !local_jar.exists() && url.contains("maven.fabricmc.net") {
-                                            let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
-                                            let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+                            let mut downloaded = false;
+                            if let Some(downloads) = &item.downloads {
+                                if let Some(artifact) = &downloads.artifact {
+                                    let lib_url = &artifact.url;
+                                    if let Ok(url_parsed) = reqwest::Url::parse(lib_url) {
+                                        let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
+                                        if path_segments.len() > 1 {
+                                            let rel_path = path_segments[1..].join("/");
+                                            let target_lib_path = libraries_dir.join(rel_path);
+                                            if !target_lib_path.exists() {
+                                                let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                                downloaded = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if !downloaded {
+                                if let Some(ref maven_name) = item.name {
+                                    if let Some((url, rel_path)) = maven_to_url(maven_name) {
+                                        let local_jar = libraries_dir.join(rel_path);
+                                        if !local_jar.exists() {
+                                            let _ = verify_and_download_file(&url, &local_jar, None).await;
+                                            if !local_jar.exists() && url.contains("maven.fabricmc.net") {
+                                                let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
+                                                let _ = verify_and_download_file(&mirror_url, &local_jar, None).await;
+                                            }
                                         }
                                     }
                                 }
