@@ -37,10 +37,15 @@ pub async fn verify_and_download_file(
 
     let client = reqwest::Client::builder()
         .user_agent("MCLauncher/4.2.1")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| e.to_string())?;
 
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Lỗi HTTP {}: {}", res.status(), url));
+    }
     let bytes = res.bytes().await.map_err(|e| e.to_string())?;
 
     let mut file = File::create(target_path).map_err(|e| e.to_string())?;
@@ -68,6 +73,8 @@ pub async fn download_file_with_progress<R: tauri::Runtime>(
 
     let client = reqwest::Client::builder()
         .user_agent("MCLauncher/4.2.1")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -77,7 +84,20 @@ pub async fn download_file_with_progress<R: tauri::Runtime>(
     }
 
     let mut res = req.send().await.map_err(|e| e.to_string())?;
-    let status_code = res.status();
+    let mut status_code = res.status();
+
+    // Nếu server trả về 416 (Range Not Satisfiable), xóa file part cũ và tải lại từ đầu
+    if status_code == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+        let _ = fs::remove_file(&part_path);
+        let retry_res = client.get(url).send().await.map_err(|e| e.to_string())?;
+        status_code = retry_res.status();
+        res = retry_res;
+    }
+
+    if !status_code.is_success() && status_code != reqwest::StatusCode::PARTIAL_CONTENT {
+        let _ = fs::remove_file(&part_path);
+        return Err(format!("Máy chủ trả về mã lỗi HTTP {} cho URL: {}", status_code, url));
+    }
 
     let (is_append, mut downloaded_bytes, total_bytes) = if status_code == reqwest::StatusCode::PARTIAL_CONTENT {
         let content_range_total = res
