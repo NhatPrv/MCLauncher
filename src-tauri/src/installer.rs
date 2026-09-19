@@ -23,6 +23,7 @@ struct VersionJsonDownload {
 #[derive(Deserialize)]
 struct DownloadEntry {
     url: String,
+    path: Option<String>,
     sha1: Option<String>,
 }
 
@@ -45,10 +46,12 @@ struct JavaVersionInfo {
 
 #[derive(Deserialize)]
 struct VersionPackageJson {
-    downloads: VersionJsonDownload,
+    downloads: Option<VersionJsonDownload>,
     libraries: Option<Vec<LibraryItem>>,
     #[serde(rename = "javaVersion")]
     java_version: Option<JavaVersionInfo>,
+    #[serde(rename = "inheritsFrom")]
+    inherits_from: Option<String>,
 }
 
 fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
@@ -115,82 +118,18 @@ pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> R
     }
     Ok(())
 }
+
 pub async fn ensure_required_asm_libraries(game_dir: &str) -> Result<(), String> {
     let libraries_dir = PathBuf::from(game_dir).join("libraries");
 
-    // Dọn dẹp thư mục version 9.6 cũ nếu có để đảm bảo duy nhất ASM 9.7.1 đồng bộ 100%
-    let old_asm_dir = libraries_dir.join("org").join("ow2").join("asm");
-    if old_asm_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&old_asm_dir) {
-            for entry in entries.flatten() {
-                if let Ok(sub_entries) = fs::read_dir(entry.path()) {
-                    for sub in sub_entries.flatten() {
-                        if sub.file_name().to_string_lossy().contains("9.6") {
-                            let _ = fs::remove_dir_all(sub.path());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // Dọn dẹp Authlib cũ (< 6.0) nếu có - bản cũ thiếu method GameProfile.getId() hoặc Property.name()
-    let authlib_dir = libraries_dir.join("com").join("mojang").join("authlib");
-    if authlib_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&authlib_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if !name.starts_with("6.") {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-
-    // Dọn dẹp tất cả các phiên bản DataFixerUpper khác 8.0.16 (như 9.0.19, 10.x đổi signature Codec.unit gây NoSuchMethodError)
-    let dfu_dir = libraries_dir.join("com").join("mojang").join("datafixerupper");
-    if dfu_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&dfu_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name != "8.0.16" {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-
-    // Dọn dẹp tất cả các phiên bản text2speech khác 1.17.9 (như 1.19.12 bị mất hàm Narrator.say(String, boolean))
-    let t2s_dir = libraries_dir.join("com").join("mojang").join("text2speech");
-    if t2s_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&t2s_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name != "1.17.9" {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-
+    // Chỉ tải các thư viện ASM và Mixin phụ trợ cho Fabric nếu chưa có
     let core_libs = vec![
-        ("com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar", "https://libraries.minecraft.net/com/mojang/datafixerupper/8.0.16/datafixerupper-8.0.16.jar"),
-        ("com/mojang/text2speech/1.17.9/text2speech-1.17.9.jar", "https://libraries.minecraft.net/com/mojang/text2speech/1.17.9/text2speech-1.17.9.jar"),
-        ("com/mojang/text2speech/1.17.9/text2speech-1.17.9-natives-windows.jar", "https://libraries.minecraft.net/com/mojang/text2speech/1.17.9/text2speech-1.17.9-natives-windows.jar"),
-        ("com/mojang/authlib/6.0.54/authlib-6.0.54.jar", "https://libraries.minecraft.net/com/mojang/authlib/6.0.54/authlib-6.0.54.jar"),
         ("org/ow2/asm/asm/9.7.1/asm-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar"),
         ("org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar"),
         ("org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-commons/9.7.1/asm-commons-9.7.1.jar"),
         ("org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-util/9.7.1/asm-util-9.7.1.jar"),
         ("org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar", "https://maven.fabricmc.net/org/ow2/asm/asm-analysis/9.7.1/asm-analysis-9.7.1.jar"),
         ("net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.15.3+mixin.0.8.7/sponge-mixin-0.15.3+mixin.0.8.7.jar"),
-        ("org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar", "https://libraries.minecraft.net/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar"),
-        ("org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-glfw/3.3.3/lwjgl-glfw-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-jemalloc/3.3.3/lwjgl-jemalloc-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-jemalloc/3.3.3/lwjgl-jemalloc-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-openal/3.3.3/lwjgl-openal-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-openal/3.3.3/lwjgl-openal-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-opengl/3.3.3/lwjgl-opengl-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-opengl/3.3.3/lwjgl-opengl-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-stb/3.3.3/lwjgl-stb-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-stb/3.3.3/lwjgl-stb-3.3.3-natives-windows.jar"),
-        ("org/lwjgl/lwjgl-tinyfd/3.3.3/lwjgl-tinyfd-3.3.3-natives-windows.jar", "https://libraries.minecraft.net/org/lwjgl/lwjgl-tinyfd/3.3.3/lwjgl-tinyfd-3.3.3-natives-windows.jar"),
     ];
 
     let client = reqwest::Client::builder()
@@ -236,14 +175,19 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
     let libraries_dir = base_path.join("libraries");
 
     let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
-    let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string()];
+    let mut versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string()];
 
     let client = reqwest::Client::builder()
         .user_agent("MCLauncher/4.2.1")
         .build()
         .unwrap_or_default();
 
-    for ver in versions_to_check {
+    let mut checked = std::collections::HashSet::new();
+    while let Some(ver) = versions_to_check.pop() {
+        if !checked.insert(ver.clone()) {
+            continue;
+        }
+
         let version_folder = base_path.join("versions").join(&ver);
         let json_path = version_folder.join(format!("{}.json", ver));
         
@@ -264,22 +208,36 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
         if json_path.exists() {
             if let Ok(content) = fs::read_to_string(&json_path) {
                 if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
+                    if let Some(parent) = parsed.inherits_from {
+                        if !parent.trim().is_empty() {
+                            versions_to_check.push(parent);
+                        }
+                    }
                     if let Some(libs) = parsed.libraries {
                         for item in libs {
                             let mut downloaded = false;
                             if let Some(downloads) = &item.downloads {
                                 if let Some(artifact) = &downloads.artifact {
                                     let lib_url = &artifact.url;
-                                    if let Ok(url_parsed) = reqwest::Url::parse(lib_url) {
+                                    let rel_path = if let Some(p) = &artifact.path {
+                                        PathBuf::from(p)
+                                    } else if let Ok(url_parsed) = reqwest::Url::parse(lib_url) {
                                         let path_segments: Vec<&str> = url_parsed.path().split('/').collect();
                                         if path_segments.len() > 1 {
-                                            let rel_path = path_segments[1..].join("/");
-                                            let target_lib_path = libraries_dir.join(rel_path);
-                                            if !target_lib_path.exists() {
-                                                let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
-                                                downloaded = true;
-                                            }
+                                            PathBuf::from(path_segments[1..].join("/"))
+                                        } else {
+                                            PathBuf::new()
                                         }
+                                    } else {
+                                        PathBuf::new()
+                                    };
+
+                                    if !rel_path.as_os_str().is_empty() {
+                                        let target_lib_path = libraries_dir.join(rel_path);
+                                        if !target_lib_path.exists() || fs::metadata(&target_lib_path).map(|m| m.len()).unwrap_or(0) == 0 {
+                                            let _ = verify_and_download_file(lib_url, &target_lib_path, artifact.sha1.as_deref()).await;
+                                        }
+                                        downloaded = true;
                                     }
                                 }
                             }
@@ -287,7 +245,7 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
                                 if let Some(ref maven_name) = item.name {
                                     if let Some((url, rel_path)) = maven_to_url(maven_name) {
                                         let local_jar = libraries_dir.join(rel_path);
-                                        if !local_jar.exists() {
+                                        if !local_jar.exists() || fs::metadata(&local_jar).map(|m| m.len()).unwrap_or(0) == 0 {
                                             let _ = verify_and_download_file(&url, &local_jar, None).await;
                                             if !local_jar.exists() && url.contains("maven.fabricmc.net") {
                                                 let mirror_url = url.replace("https://maven.fabricmc.net", "https://bmclapi2.bangbang93.com/maven");
@@ -596,9 +554,11 @@ pub async fn ensure_vanilla_version(game_dir: &str, game_version: &str) -> Resul
         fs::write(&version_json, &pkg_text).map_err(|e| e.to_string())?;
 
         if let Ok(pkg_json) = serde_json::from_str::<VersionPackageJson>(&pkg_text) {
-            let client_url = pkg_json.downloads.client.url;
-            let sha1 = pkg_json.downloads.client.sha1;
-            verify_and_download_file(&client_url, &client_jar, sha1.as_deref()).await?;
+            if let Some(ref dls) = pkg_json.downloads {
+                let client_url = &dls.client.url;
+                let sha1 = dls.client.sha1.as_deref();
+                verify_and_download_file(client_url, &client_jar, sha1).await?;
+            }
 
             if let Some(libs) = pkg_json.libraries {
                 for lib in libs {
@@ -685,8 +645,10 @@ pub async fn ensure_bundle_version_files<R: tauri::Runtime>(
                 if let Ok(text) = res.text().await {
                     let _ = fs::write(&json_path, &text);
                     if let Ok(pkg) = serde_json::from_str::<VersionPackageJson>(&text) {
-                        client_download_url = Some(pkg.downloads.client.url);
-                        client_sha1 = pkg.downloads.client.sha1;
+                        if let Some(ref dls) = pkg.downloads {
+                            client_download_url = Some(dls.client.url.clone());
+                            client_sha1 = dls.client.sha1.clone();
+                        }
 
                         if let Some(libs) = pkg.libraries {
                             for lib in libs {

@@ -8,8 +8,19 @@ use crate::auth::Account;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
+struct LibraryArtifact {
+    path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct LibraryDownloads {
+    artifact: Option<LibraryArtifact>,
+}
+
+#[derive(Deserialize)]
 struct LibraryNameItem {
     name: Option<String>,
+    downloads: Option<LibraryDownloads>,
 }
 
 #[derive(Deserialize)]
@@ -119,12 +130,23 @@ fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<Strin
                     }
                     if let Some(libs) = parsed.libraries {
                         for lib_item in libs {
-                            if let Some(maven_name) = lib_item.name {
-                                if let Some(rel_path) = maven_to_local_path(&maven_name) {
-                                    let full_jar = libraries_dir.join(rel_path);
-                                    if full_jar.exists() {
-                                        manifest_jars.push(full_jar.to_string_lossy().to_string());
+                            let mut resolved_path = None;
+                            if let Some(ref downloads) = lib_item.downloads {
+                                if let Some(ref artifact) = downloads.artifact {
+                                    if let Some(ref p) = artifact.path {
+                                        resolved_path = Some(PathBuf::from(p));
                                     }
+                                }
+                            }
+                            if resolved_path.is_none() {
+                                if let Some(ref maven_name) = lib_item.name {
+                                    resolved_path = maven_to_local_path(maven_name);
+                                }
+                            }
+                            if let Some(rel_path) = resolved_path {
+                                let full_jar = libraries_dir.join(rel_path);
+                                if full_jar.exists() {
+                                    manifest_jars.push(full_jar.to_string_lossy().to_string());
                                 }
                             }
                         }
@@ -278,109 +300,19 @@ pub fn launch_game(
     let natives_dir = extract_natives(&game_dir, version_id);
     let natives_path_str = natives_dir.to_string_lossy().to_string();
 
-    // Dọn dẹp tất cả các phiên bản DFU khác 8.0.16 (như 9.0.19, 10.x gây NoSuchMethodError Codec.unit)
-    let dfu_dir = game_dir.join("libraries").join("com").join("mojang").join("datafixerupper");
-    if dfu_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&dfu_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name != "8.0.16" {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-
-    // Dọn dẹp tất cả các phiên bản text2speech khác 1.17.9 (như 1.19.12 gây NoSuchMethodError Narrator.say)
-    let t2s_dir = game_dir.join("libraries").join("com").join("mojang").join("text2speech");
-    if t2s_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&t2s_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name != "1.17.9" {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-
-    // Dọn dẹp tất cả các phiên bản Netty >= 4.2 hoặc 5.x (gây IllegalArgumentException: IoHandle trong Singleplayer)
-    let netty_dir = game_dir.join("libraries").join("io").join("netty");
-    if netty_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&netty_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    if let Ok(ver_entries) = fs::read_dir(entry.path()) {
-                        for ver_entry in ver_entries.flatten() {
-                            let ver_name = ver_entry.file_name().to_string_lossy().to_string();
-                            if ver_name.starts_with("4.2.") || ver_name.starts_with("5.") {
-                                let _ = fs::remove_dir_all(ver_entry.path());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
     let version_libs = collect_libraries_for_version(&game_dir, version_id);
     jar_list.extend(version_libs);
 
-    // Nạp bổ sung các thư viện cốt lõi cho Fabric/KnotClient/NeoForge nếu chưa có trong Profile JSON
-    let extra_lib_dirs = vec![
-        game_dir.join("libraries").join("cpw"),
-        game_dir.join("libraries").join("net").join("neoforged"),
-        game_dir.join("libraries").join("net").join("minecraftforge"),
-        game_dir.join("libraries").join("org").join("ow2").join("asm"),
-        game_dir.join("libraries").join("net").join("fabricmc").join("sponge-mixin"),
-        game_dir.join("libraries").join("org").join("spongepowered"),
-        game_dir.join("libraries").join("net").join("fabricmc").join("intermediary"),
-        game_dir.join("libraries").join("org").join("slf4j"),
-        game_dir.join("libraries").join("org").join("lwjgl"),
-        game_dir.join("libraries").join("com").join("mojang").join("authlib"),
-        game_dir.join("libraries").join("com").join("mojang").join("datafixerupper"),
-        game_dir.join("libraries").join("com").join("google"),
-        game_dir.join("libraries").join("org").join("apache"),
-        game_dir.join("libraries").join("it").join("unimi"),
-        game_dir.join("libraries").join("net").join("sf").join("jopt-simple"),
-        game_dir.join("libraries").join("org").join("joml"),
-    ];
+    let mut final_jars = jar_list;
+    final_jars.sort();
+    final_jars.dedup();
 
-    for dir in extra_lib_dirs {
-        if dir.exists() {
-            let mut extra_jars = Vec::new();
-            collect_jars_recursive(&dir, &mut extra_jars);
-            jar_list.extend(extra_jars);
-        }
-    }
-
-    // Lọc và chỉ giữ lại duy nhất phiên bản mới nhất cho từng thư viện (loại bỏ các file xung đột)
-    let mut artifact_map: std::collections::HashMap<String, Vec<PathBuf>> = std::collections::HashMap::new();
-    for jar_str in jar_list {
-        let p = PathBuf::from(&jar_str);
-        let s = p.to_string_lossy();
-        // Loại trừ hoàn toàn các bản Netty không tương thích (>= 4.2)
-        if (s.contains("io/netty") || s.contains("io\\netty")) && (s.contains("4.2.") || s.contains("5.")) {
-            continue;
-        }
-        if let Some(parent) = p.parent() {
-            if let Some(artifact_dir) = parent.parent() {
-                let key = artifact_dir.to_string_lossy().to_string();
-                artifact_map.entry(key).or_default().push(p);
-                continue;
-            }
-        }
-        artifact_map.entry(jar_str.clone()).or_default().push(p);
-    }
-
-    let mut final_jars = Vec::new();
-    for (_key, mut paths) in artifact_map {
-        paths.sort_by(|a, b| compare_semver_paths(a, b));
-        if let Some(best) = paths.first() {
-            final_jars.push(best.to_string_lossy().to_string());
-        }
+    // Debug: log classpath để kiểm tra
+    eprintln!("[MCLauncher DEBUG] Classpath entries ({} jars):", final_jars.len());
+    for j in &final_jars {
+        eprintln!("  CP: {}", j);
     }
 
     final_jars.sort();
