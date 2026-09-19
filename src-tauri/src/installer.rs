@@ -38,9 +38,17 @@ struct LibraryItem {
 }
 
 #[derive(Deserialize)]
+struct JavaVersionInfo {
+    #[serde(rename = "majorVersion")]
+    major_version: Option<u32>,
+}
+
+#[derive(Deserialize)]
 struct VersionPackageJson {
     downloads: VersionJsonDownload,
     libraries: Option<Vec<LibraryItem>>,
+    #[serde(rename = "javaVersion")]
+    java_version: Option<JavaVersionInfo>,
 }
 
 fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
@@ -344,25 +352,51 @@ pub async fn download_modrinth_mod_to_dir(
     Ok(())
 }
 
-pub fn get_required_java_version(version_id: &str) -> u32 {
-    let ver_str = version_id.split('-').next().unwrap_or(version_id);
-    let parts: Vec<u32> = ver_str.split('.').filter_map(|s| s.parse().ok()).collect();
+pub fn get_required_java_version(game_dir: Option<&str>, version_id: &str) -> u32 {
+    let vanilla_ver = version_id.split('-').next().unwrap_or(version_id);
 
-    if parts.is_empty() {
-        return 21;
+    // 1. Kiểm tra trực tiếp file JSON của phiên bản xem có khai báo javaVersion.majorVersion không
+    if let Some(gd) = game_dir {
+        let base_path = PathBuf::from(gd);
+        let versions_to_check = vec![version_id.to_string(), vanilla_ver.to_string()];
+        for ver in versions_to_check {
+            let json_path = base_path.join("versions").join(&ver).join(format!("{}.json", ver));
+            if json_path.exists() {
+                if let Ok(content) = fs::read_to_string(&json_path) {
+                    if let Ok(parsed) = serde_json::from_str::<VersionPackageJson>(&content) {
+                        if let Some(jv) = parsed.java_version {
+                            if let Some(major) = jv.major_version {
+                                if major >= 8 {
+                                    return major;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    if parts.len() >= 2 && parts[0] == 1 {
-        let minor = parts[1];
-        let patch = parts.get(2).cloned().unwrap_or(0);
+    // 2. Dự đoán dựa trên số phiên bản
+    let parts: Vec<u32> = vanilla_ver.split('.').filter_map(|s| s.parse().ok()).collect();
 
-        if minor > 20 || (minor == 20 && patch >= 5) {
-            return 21; // 1.20.5+ -> JDK 21 (LTS)
+    if !parts.is_empty() {
+        if parts[0] >= 25 || vanilla_ver.starts_with("25w") || vanilla_ver.starts_with("26w") {
+            return 25; // Minecraft 25.x / 26.x / Snapshots mới -> JDK 25 (class file version 69.0)
         }
-        if minor >= 17 {
-            return 17; // 1.17 - 1.20.4 -> JDK 17
+
+        if parts.len() >= 2 && parts[0] == 1 {
+            let minor = parts[1];
+            let patch = parts.get(2).cloned().unwrap_or(0);
+
+            if minor > 20 || (minor == 20 && patch >= 5) {
+                return 21; // 1.20.5+ -> JDK 21 (LTS)
+            }
+            if minor >= 17 {
+                return 17; // 1.17 - 1.20.4 -> JDK 17
+            }
+            return 8; // <= 1.16.5 -> JDK 8
         }
-        return 8; // <= 1.16.5 -> JDK 8
     }
 
     21

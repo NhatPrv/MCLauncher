@@ -117,8 +117,8 @@ async fn install_mod_loader_cmd(
 async fn launch_minecraft(app_handle: tauri::AppHandle, version_id: String, account: Account, config: AppConfig) -> Result<u32, String> {
     let mut final_config = config.clone();
     
-    // Tự động xác định phiên bản JDK chuẩn cho version_id này (8, 17, 21)
-    let req_java_ver = get_required_java_version(&version_id);
+    // Tự động xác định phiên bản JDK chuẩn cho version_id này (8, 17, 21, 25)
+    let req_java_ver = get_required_java_version(Some(&final_config.game_dir), &version_id);
     if let Ok(portable_java) = ensure_portable_java_version_with_app(Some(&app_handle), &final_config.game_dir, req_java_ver).await {
         final_config.java_path = portable_java;
     }
