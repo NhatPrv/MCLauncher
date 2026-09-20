@@ -7,6 +7,7 @@ pub struct VersionEntry {
     pub version_type: String,
     pub url: String,
     pub time: String,
+    #[serde(rename = "releaseTime")]
     pub release_time: String,
 }
 
@@ -28,10 +29,21 @@ pub async fn fetch_vanilla_versions() -> Result<VersionManifest, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-    let res = client.get(url).send().await.map_err(|e| e.to_string())?;
-    let manifest = res.json::<VersionManifest>().await.map_err(|e| e.to_string())?;
-    Ok(manifest)
+    let urls = vec![
+        "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+        "https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json",
+    ];
+
+    for url in urls {
+        if let Ok(res) = client.get(url).send().await {
+            if res.status().is_success() {
+                if let Ok(manifest) = res.json::<VersionManifest>().await {
+                    return Ok(manifest);
+                }
+            }
+        }
+    }
+    Err("Không thể tải danh sách phiên bản Minecraft từ Mojang hoặc Mirror!".to_string())
 }
 
 pub async fn fetch_all_fabric_game_versions() -> Result<Vec<String>, String> {
