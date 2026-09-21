@@ -39,6 +39,12 @@ struct LibraryItem {
 }
 
 #[derive(Deserialize)]
+struct JavaVersionInfo {
+    #[serde(rename = "majorVersion")]
+    major_version: Option<u32>,
+}
+
+#[derive(Deserialize)]
 struct AssetIndexPackageInfo {
     id: Option<String>,
     url: Option<String>,
