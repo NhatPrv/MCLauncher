@@ -24,12 +24,20 @@ struct LibraryNameItem {
 }
 
 #[derive(Deserialize)]
+struct AssetIndexInfo {
+    id: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct VersionManifestJson {
     #[serde(rename = "mainClass")]
     main_class: Option<String>,
     #[serde(rename = "inheritsFrom")]
     inherits_from: Option<String>,
     libraries: Option<Vec<LibraryNameItem>>,
+    #[serde(rename = "assetIndex")]
+    asset_index: Option<AssetIndexInfo>,
+    assets: Option<String>,
 }
 
 fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
@@ -46,6 +54,44 @@ fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
         }
     }
     "net.minecraft.client.main.Main".to_string()
+}
+
+fn get_asset_index_for_version(game_dir: &Path, version_id: &str) -> String {
+    let mut versions_to_check = vec![
+        version_id.to_string(),
+        version_id.split('-').next().unwrap_or(version_id).to_string(),
+    ];
+    let mut checked_set = std::collections::HashSet::new();
+    while let Some(ver) = versions_to_check.pop() {
+        if !checked_set.insert(ver.clone()) {
+            continue;
+        }
+        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
+        if json_path.exists() {
+            if let Ok(content) = fs::read_to_string(&json_path) {
+                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                    if let Some(ref ai) = parsed.asset_index {
+                        if let Some(ref id) = ai.id {
+                            if !id.trim().is_empty() {
+                                return id.clone();
+                            }
+                        }
+                    }
+                    if let Some(ref a) = parsed.assets {
+                        if !a.trim().is_empty() {
+                            return a.clone();
+                        }
+                    }
+                    if let Some(parent_ver) = parsed.inherits_from {
+                        if !parent_ver.trim().is_empty() {
+                            versions_to_check.push(parent_ver);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    version_id.split('-').next().unwrap_or(version_id).to_string()
 }
 
 fn maven_to_local_path(maven_name: &str) -> Option<PathBuf> {
@@ -348,6 +394,8 @@ pub fn launch_game(
         game_dir.to_string_lossy().to_string()
     };
 
+    let asset_index_to_use = get_asset_index_for_version(&game_dir, version_id);
+
     args.extend(vec![
         "-cp".to_string(),
         classpath,
@@ -361,7 +409,7 @@ pub fn launch_game(
         "--assetsDir".to_string(),
         assets_dir.to_string_lossy().to_string(),
         "--assetIndex".to_string(),
-        vanilla_version_str.to_string(),
+        asset_index_to_use,
         "--uuid".to_string(),
         account.uuid.clone(),
         "--accessToken".to_string(),

@@ -39,9 +39,10 @@ struct LibraryItem {
 }
 
 #[derive(Deserialize)]
-struct JavaVersionInfo {
-    #[serde(rename = "majorVersion")]
-    major_version: Option<u32>,
+struct AssetIndexPackageInfo {
+    id: Option<String>,
+    url: Option<String>,
+    sha1: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -52,6 +53,8 @@ struct VersionPackageJson {
     java_version: Option<JavaVersionInfo>,
     #[serde(rename = "inheritsFrom")]
     inherits_from: Option<String>,
+    #[serde(rename = "assetIndex")]
+    asset_index: Option<AssetIndexPackageInfo>,
 }
 
 fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
@@ -213,6 +216,17 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
                             versions_to_check.push(parent);
                         }
                     }
+
+                    // Tải asset index nếu có
+                    if let Some(ref ai) = parsed.asset_index {
+                        if let (Some(ref id), Some(ref url)) = (&ai.id, &ai.url) {
+                            let index_file = base_path.join("assets").join("indexes").join(format!("{}.json", id));
+                            if !index_file.exists() || fs::metadata(&index_file).map(|m| m.len()).unwrap_or(0) == 0 {
+                                let _ = verify_and_download_file(url, &index_file, ai.sha1.as_deref()).await;
+                            }
+                        }
+                    }
+
                     if let Some(libs) = parsed.libraries {
                         for item in libs {
                             let mut downloaded = false;
