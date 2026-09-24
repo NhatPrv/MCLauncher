@@ -91,8 +91,26 @@ pub async fn fetch_fabric_versions(game_version: &str) -> Result<Vec<String>, St
 }
 
 pub async fn fetch_forge_versions(game_version: &str) -> Result<Vec<String>, String> {
-    let url = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
     let client = reqwest::Client::builder().user_agent("MCLauncher/4.2.1").build().map_err(|e| e.to_string())?;
+    
+    // 1. Thử qua BMCLAPI mirror
+    let mirror_url = format!("https://bmclapi2.bangbang93.com/forge/minecraft/{}", game_version);
+    if let Ok(res) = client.get(&mirror_url).send().await {
+        if res.status().is_success() {
+            #[derive(Deserialize)]
+            struct BmclapiForgeItem {
+                version: String,
+            }
+            if let Ok(items) = res.json::<Vec<BmclapiForgeItem>>().await {
+                if !items.is_empty() {
+                    return Ok(items.into_iter().map(|it| format!("{}-{}", game_version, it.version)).collect());
+                }
+            }
+        }
+    }
+
+    // 2. Thử qua Maven official
+    let url = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
     if let Ok(res) = client.get(url).send().await {
         if let Ok(json) = res.json::<serde_json::Value>().await {
             if let Some(promos) = json.get("promos").and_then(|p| p.as_object()) {
@@ -111,7 +129,7 @@ pub async fn fetch_forge_versions(game_version: &str) -> Result<Vec<String>, Str
             }
         }
     }
-    Ok(vec![format!("{}-49.0.30", game_version), format!("{}-47.2.0", game_version)])
+    Ok(vec![format!("{}-latest", game_version)])
 }
 
 pub async fn fetch_quilt_versions(game_version: &str) -> Result<Vec<String>, String> {

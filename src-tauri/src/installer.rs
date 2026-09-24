@@ -819,19 +819,25 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             Ok(version_id)
         }
         ModLoaderType::Forge => {
+            let target_mojang_ver = game_version.split('-').next().unwrap_or(game_version);
             let version_id = format!("{}-forge-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
             let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
 
-            let target_mojang_ver = game_version.split('-').next().unwrap_or(game_version);
             let json_path = target_dir.join(format!("{}.json", version_id));
 
             let actual_forge_ver = if loader_version == "latest" || loader_version.is_empty() {
                 if target_mojang_ver == "1.21.1" { "51.0.33" }
+                else if target_mojang_ver == "1.20.4" { "49.0.38" }
+                else if target_mojang_ver == "1.20.2" { "48.1.0" }
                 else if target_mojang_ver == "1.20.1" { "47.3.0" }
+                else if target_mojang_ver == "1.19.4" { "45.2.0" }
                 else if target_mojang_ver == "1.19.2" { "43.3.0" }
+                else if target_mojang_ver == "1.18.2" { "40.2.17" }
                 else if target_mojang_ver == "1.16.5" { "36.2.39" }
+                else if target_mojang_ver == "1.12.2" { "14.23.5.2860" }
+                else if target_mojang_ver == "1.7.10" { "10.13.4.1614" }
                 else { "51.0.33" }
             } else {
                 loader_version
@@ -876,6 +882,15 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
                                         let mut content = String::new();
                                         if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
                                             let _ = fs::write(&json_path, &content);
+                                        }
+                                    } else if name_str == "install_profile.json" {
+                                        let mut content = String::new();
+                                        if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                                                if let Some(v_info) = v.get("versionInfo").or_else(|| v.get("install").and_then(|i| i.get("versionInfo"))) {
+                                                    let _ = fs::write(&json_path, serde_json::to_string_pretty(v_info).unwrap_or_default());
+                                                }
+                                            }
                                         }
                                     } else if name_str.starts_with("maven/") {
                                         let rel_lib = name_str.trim_start_matches("maven/");

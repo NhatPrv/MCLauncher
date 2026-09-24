@@ -28,6 +28,12 @@ struct AssetIndexInfo {
     id: Option<String>,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+struct VersionArguments {
+    game: Option<Vec<serde_json::Value>>,
+    jvm: Option<Vec<serde_json::Value>>,
+}
+
 #[derive(Deserialize)]
 struct VersionManifestJson {
     #[serde(rename = "mainClass")]
@@ -38,22 +44,153 @@ struct VersionManifestJson {
     #[serde(rename = "assetIndex")]
     asset_index: Option<AssetIndexInfo>,
     assets: Option<String>,
+    arguments: Option<VersionArguments>,
+    #[serde(rename = "minecraftArguments")]
+    minecraft_arguments: Option<String>,
+}
+
+fn is_rule_allowed(rule_obj: &serde_json::Value) -> bool {
+    let action = rule_obj.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
+    let is_allow = action == "allow";
+
+    if let Some(os_obj) = rule_obj.get("os") {
+        if let Some(os_name) = os_obj.get("name").and_then(|n| n.as_str()) {
+            let current_os = if cfg!(target_os = "windows") {
+                "windows"
+            } else if cfg!(target_os = "macos") {
+                "osx"
+            } else {
+                "linux"
+            };
+            if os_name != current_os {
+                return !is_allow;
+            }
+        }
+    }
+    is_allow
+}
+
+fn extract_arg_values(val: &serde_json::Value) -> Vec<String> {
+    if let Some(s) = val.as_str() {
+        return vec![s.to_string()];
+    }
+    if let Some(obj) = val.as_object() {
+        if let Some(rules) = obj.get("rules").and_then(|r| r.as_array()) {
+            let mut allowed = false;
+            for r in rules {
+                if is_rule_allowed(r) {
+                    allowed = true;
+                } else {
+                    allowed = false;
+                }
+            }
+            if !allowed {
+                return Vec::new();
+            }
+        }
+        if let Some(value_node) = obj.get("value") {
+            if let Some(s) = value_node.as_str() {
+                return vec![s.to_string()];
+            } else if let Some(arr) = value_node.as_array() {
+                return arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn substitute_placeholders(input: &str, vars: &HashMap<&str, &str>) -> String {
+    let mut result = input.to_string();
+    for (k, v) in vars {
+        let pattern = format!("${{{}}}", k);
+        result = result.replace(&pattern, v);
+    }
+    result
 }
 
 fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
-    let json_path = game_dir.join("versions").join(version_id).join(format!("{}.json", version_id));
-    if json_path.exists() {
-        if let Ok(content) = fs::read_to_string(&json_path) {
-            if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
-                if let Some(mc) = parsed.main_class {
-                    if !mc.trim().is_empty() {
-                        return mc;
+    let mut versions_to_check = vec![
+        version_id.to_string(),
+        version_id.split('-').next().unwrap_or(version_id).to_string(),
+    ];
+    let mut checked_set = std::collections::HashSet::new();
+    while let Some(ver) = versions_to_check.pop() {
+        if !checked_set.insert(ver.clone()) {
+            continue;
+        }
+        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
+        if json_path.exists() {
+            if let Ok(content) = fs::read_to_string(&json_path) {
+                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                    if let Some(mc) = parsed.main_class {
+                        if !mc.trim().is_empty() {
+                            return mc;
+                        }
+                    }
+                    if let Some(parent_ver) = parsed.inherits_from {
+                        if !parent_ver.trim().is_empty() {
+                            versions_to_check.push(parent_ver);
+                        }
                     }
                 }
             }
         }
     }
     "net.minecraft.client.main.Main".to_string()
+}
+
+fn get_manifest_arguments(
+    game_dir: &Path,
+    version_id: &str,
+) -> (Vec<String>, Vec<String>, Option<String>) {
+    let mut jvm_args = Vec::new();
+    let mut game_args = Vec::new();
+    let mut legacy_args = None;
+
+    let mut versions_to_check = vec![
+        version_id.to_string(),
+        version_id.split('-').next().unwrap_or(version_id).to_string(),
+    ];
+    let mut checked_set = std::collections::HashSet::new();
+
+    while let Some(ver) = versions_to_check.pop() {
+        if !checked_set.insert(ver.clone()) {
+            continue;
+        }
+        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
+        if json_path.exists() {
+            if let Ok(content) = fs::read_to_string(&json_path) {
+                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                    if let Some(ref args) = parsed.arguments {
+                        if let Some(ref jvm_list) = args.jvm {
+                            for item in jvm_list {
+                                jvm_args.extend(extract_arg_values(item));
+                            }
+                        }
+                        if game_args.is_empty() {
+                            if let Some(ref game_list) = args.game {
+                                for item in game_list {
+                                    game_args.extend(extract_arg_values(item));
+                                }
+                            }
+                        }
+                    }
+                    if legacy_args.is_none() {
+                        if let Some(ref mc_args) = parsed.minecraft_arguments {
+                            legacy_args = Some(mc_args.clone());
+                        }
+                    }
+                    if let Some(parent_ver) = parsed.inherits_from {
+                        if !parent_ver.trim().is_empty() {
+                            versions_to_check.push(parent_ver);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    (jvm_args, game_args, legacy_args)
 }
 
 fn get_asset_index_for_version(game_dir: &Path, version_id: &str) -> String {
@@ -373,19 +510,6 @@ pub fn launch_game(
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
     let classpath = final_jars.join(cp_separator);
 
-    let mut args: Vec<String> = vec![
-        min_ram_arg,
-        max_ram_arg,
-        format!("-Djava.library.path={}", natives_path_str),
-        format!("-Dorg.lwjgl.librarypath={}", natives_path_str),
-    ];
-
-    if !config.jvm_args.trim().is_empty() {
-        for arg in config.jvm_args.split_whitespace() {
-            args.push(arg.to_string());
-        }
-    }
-
     let vanilla_version_str = version_id.split('-').next().unwrap_or(version_id);
     let main_class_to_run = get_main_class_for_version(&game_dir, version_id);
     let game_dir_to_use = if version_dir.exists() {
@@ -395,32 +519,132 @@ pub fn launch_game(
     };
 
     let asset_index_to_use = get_asset_index_for_version(&game_dir, version_id);
+    let assets_dir_str = assets_dir.to_string_lossy().to_string();
+    let libraries_dir_str = game_dir.join("libraries").to_string_lossy().to_string();
+    let width_str = config.resolution_width.to_string();
+    let height_str = config.resolution_height.to_string();
 
-    args.extend(vec![
-        "-cp".to_string(),
-        classpath,
-        main_class_to_run,
-        "--username".to_string(),
-        account.username.clone(),
-        "--version".to_string(),
-        vanilla_version_str.to_string(),
-        "--gameDir".to_string(),
-        game_dir_to_use,
-        "--assetsDir".to_string(),
-        assets_dir.to_string_lossy().to_string(),
-        "--assetIndex".to_string(),
-        asset_index_to_use,
-        "--uuid".to_string(),
-        account.uuid.clone(),
-        "--accessToken".to_string(),
-        account.access_token.clone(),
-        "--userType".to_string(),
-        "mojang".to_string(),
-        "--width".to_string(),
-        config.resolution_width.to_string(),
-        "--height".to_string(),
-        config.resolution_height.to_string(),
-    ]);
+    let mut placeholder_vars = HashMap::new();
+    placeholder_vars.insert("auth_player_name", account.username.as_str());
+    placeholder_vars.insert("version_name", version_id);
+    placeholder_vars.insert("game_directory", game_dir_to_use.as_str());
+    placeholder_vars.insert("assets_root", assets_dir_str.as_str());
+    placeholder_vars.insert("game_assets", assets_dir_str.as_str());
+    placeholder_vars.insert("assets_index_name", asset_index_to_use.as_str());
+    placeholder_vars.insert("auth_uuid", account.uuid.as_str());
+    placeholder_vars.insert("auth_access_token", account.access_token.as_str());
+    placeholder_vars.insert("user_type", "mojang");
+    placeholder_vars.insert("version_type", "release");
+    placeholder_vars.insert("natives_directory", natives_path_str.as_str());
+    placeholder_vars.insert("classpath", classpath.as_str());
+    placeholder_vars.insert("library_directory", libraries_dir_str.as_str());
+    placeholder_vars.insert("classpath_separator", cp_separator);
+    placeholder_vars.insert("launcher_name", "MCLauncher");
+    placeholder_vars.insert("launcher_version", "4.2.1");
+    placeholder_vars.insert("user_properties", "{}");
+
+    let (manifest_jvm_args, manifest_game_args, legacy_mc_args) =
+        get_manifest_arguments(&game_dir, version_id);
+
+    let mut args: Vec<String> = vec![
+        min_ram_arg,
+        max_ram_arg,
+        format!("-Djava.library.path={}", natives_path_str),
+        format!("-Dorg.lwjgl.librarypath={}", natives_path_str),
+        "-Dminecraft.launcher.brand=MCLauncher".to_string(),
+        "-Dminecraft.launcher.version=4.2.1".to_string(),
+    ];
+
+    if !config.jvm_args.trim().is_empty() {
+        for arg in config.jvm_args.split_whitespace() {
+            args.push(arg.to_string());
+        }
+    }
+
+    // Nạp thêm JVM arguments từ Manifest (như module opens/exports của Forge)
+    for jvm_item in manifest_jvm_args {
+        let substituted = substitute_placeholders(&jvm_item, &placeholder_vars);
+        if substituted.starts_with("-Djava.library.path=")
+            || substituted == "-cp"
+            || substituted == classpath
+        {
+            continue;
+        }
+        args.push(substituted);
+    }
+
+    args.push("-cp".to_string());
+    args.push(classpath.clone());
+    args.push(main_class_to_run);
+
+    // Nạp Game arguments
+    if !manifest_game_args.is_empty() {
+        let mut has_width = false;
+        let mut has_height = false;
+        for g_arg in manifest_game_args {
+            let substituted = substitute_placeholders(&g_arg, &placeholder_vars);
+            if substituted == "--width" {
+                has_width = true;
+            }
+            if substituted == "--height" {
+                has_height = true;
+            }
+            args.push(substituted);
+        }
+        if !has_width {
+            args.push("--width".to_string());
+            args.push(width_str);
+        }
+        if !has_height {
+            args.push("--height".to_string());
+            args.push(height_str);
+        }
+    } else if let Some(mc_args) = legacy_mc_args {
+        let mut has_width = false;
+        let mut has_height = false;
+        for token in mc_args.split_whitespace() {
+            let substituted = substitute_placeholders(token, &placeholder_vars);
+            if substituted == "--width" {
+                has_width = true;
+            }
+            if substituted == "--height" {
+                has_height = true;
+            }
+            args.push(substituted);
+        }
+        if !has_width {
+            args.push("--width".to_string());
+            args.push(width_str);
+        }
+        if !has_height {
+            args.push("--height".to_string());
+            args.push(height_str);
+        }
+    } else {
+        // Fallback chuẩn Vanilla
+        args.extend(vec![
+            "--username".to_string(),
+            account.username.clone(),
+            "--version".to_string(),
+            vanilla_version_str.to_string(),
+            "--gameDir".to_string(),
+            game_dir_to_use,
+            "--assetsDir".to_string(),
+            assets_dir_str,
+            "--assetIndex".to_string(),
+            asset_index_to_use,
+            "--uuid".to_string(),
+            account.uuid.clone(),
+            "--accessToken".to_string(),
+            account.access_token.clone(),
+            "--userType".to_string(),
+            "mojang".to_string(),
+            "--width".to_string(),
+            width_str,
+            "--height".to_string(),
+            height_str,
+        ]);
+    }
 
     // Giải quyết triệt để lỗi OS error 206 (Command line too long trên Windows):
     // Sử dụng tính năng Java @argfile truyền toàn bộ tham số qua file jvm_args.txt
