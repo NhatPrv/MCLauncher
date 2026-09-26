@@ -53,6 +53,22 @@ fn is_rule_allowed(rule_obj: &serde_json::Value) -> bool {
     let action = rule_obj.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
     let is_allow = action == "allow";
 
+    if let Some(features) = rule_obj.get("features").and_then(|f| f.as_object()) {
+        for (feat_name, feat_val) in features {
+            let required_val = feat_val.as_bool().unwrap_or(false);
+            if feat_name == "has_custom_resolution" {
+                if !required_val {
+                    return !is_allow;
+                }
+            } else {
+                // Các tính năng demo, quick play không kích hoạt theo mặc định
+                if required_val {
+                    return !is_allow;
+                }
+            }
+        }
+    }
+
     if let Some(os_obj) = rule_obj.get("os") {
         if let Some(os_name) = os_obj.get("name").and_then(|n| n.as_str()) {
             let current_os = if cfg!(target_os = "windows") {
@@ -542,6 +558,10 @@ pub fn launch_game(
     placeholder_vars.insert("launcher_name", "MCLauncher");
     placeholder_vars.insert("launcher_version", "4.2.1");
     placeholder_vars.insert("user_properties", "{}");
+    placeholder_vars.insert("resolution_width", width_str.as_str());
+    placeholder_vars.insert("resolution_height", height_str.as_str());
+    placeholder_vars.insert("clientid", "0");
+    placeholder_vars.insert("auth_xuid", "");
 
     let (manifest_jvm_args, manifest_game_args, legacy_mc_args) =
         get_manifest_arguments(&game_dir, version_id);
