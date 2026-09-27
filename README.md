@@ -1,72 +1,66 @@
-# 🎮 MCLauncher - Next-Gen Minecraft Launcher
+# 🎮 MCLauncher
 
-**MCLauncher** là ứng dụng khởi chạy Minecraft hiện đại, tốc độ cao, tiêu thụ cực ít tài nguyên hệ thống (RAM < 50MB) và được thiết kế với tiêu chí **BẢO MẬT HÀNG ĐẦU, NÓI KHÔNG VỚI MALWARE & BLOATWARE**. Dự án ra đời nhằm thay thế hoàn hảo các launcher thiếu an toàn như TLauncher.
+**MCLauncher** là launcher Minecraft desktop xây bằng **Tauri + Rust + React**, tập trung vào hiệu năng nhẹ, bảo mật và hỗ trợ nhiều mod loader.
 
----
+## Tính năng chính
 
-## 🌟 Tính Năng Nổi Bật (100% Completed)
+- Tải và chạy nhiều phiên bản Minecraft Vanilla
+- Hỗ trợ cài đặt loader: **Fabric, Forge, Quilt, NeoForge, OptiFine, Iris**
+- Đăng nhập **Offline** và **Microsoft OAuth2**
+- Tự động phát hiện/cấu hình Java, tuỳ chỉnh RAM và JVM args
+- Giao diện React + TailwindCSS với hỗ trợ Light/Dark mode
 
-- 🚀 **Siêu Nhẹ & Tốc Độ:** Được xây dựng bằng Rust (Tauri v2) + React + TailwindCSS.
-- 🔒 **Bảo Mật Bộ Nhớ Tuyệt Đối:** Không chứa code theo dõi, không quảng cáo, không thu thập dữ liệu trái phép.
-- 📦 **Hỗ Trợ Mọi Phiên Bản Vanilla:** Tải và khởi chạy tự động các bản Minecraft từ cổ điển đến mới nhất (1.0 -> 1.21+).
-- 🛠️ **Tích Hợp Tự Động Mod Loaders:**
-  - ⚡ **Fabric Loader**
-  - 🔨 **Forge Loader**
-  - 🍃 **Quilt Loader**
-  - 💥 **NeoForge**
-- 🎨 **Tối Ưu Đồ Họa Hàng Đầu:** Tích hợp sẵn cài đặt **OptiFine** & **Iris Shaders**.
-- 🔑 **Quản Lý Tài Khoản Linh Hoạt:**
-  - 🟢 **Offline Mode (Cracked):** Đăng nhập nhanh với tên tùy chọn.
-  - 🟦 **Microsoft Online Account:** Đăng nhập chính chủ an toàn qua Microsoft OAuth2 Protocol.
-- ⚙️ **Cấu Hình Game Mạnh Mẽ:** Tùy chỉnh RAM Min/Max, đường dẫn Java Executable, độ phân giải màn hình, tham số JVM Custom.
-- 🌓 **Giao Diện Hiện Đại & Dark Mode:** Hỗ trợ chuyển đổi giao diện Sáng / Tối linh hoạt.
+## Kiến trúc nhanh
 
----
+- **Frontend**: React + TypeScript (`/src`)
+- **Backend**: Rust (Tauri commands, `/src-tauri/src`)
+- **Core modules**: `auth`, `config`, `version_manifest`, `installer`, `downloader`, `launcher`
 
-## 🛠️ Công Nghệ Sử Dụng (Tech Stack)
+Tài liệu chi tiết:
+- `/home/runner/work/MCLauncher/MCLauncher/ARCHITECTURE.md`
+- `/home/runner/work/MCLauncher/MCLauncher/ROADMAP.md`
+- `/home/runner/work/MCLauncher/MCLauncher/docs/mod-loader-analysis.md`
 
-| Thành phần | Công nghệ | Lý do chọn |
-| :--- | :--- | :--- |
-| **Backend Core** | Rust (Tauri v2) | Hiệu năng native, bảo mật bộ nhớ, RAM cực nhẹ (< 50MB) |
-| **Frontend UI** | React + TypeScript | Giao diện tương tác mượt mà, cấu trúc code rõ ràng |
-| **Styling** | TailwindCSS | Thiết kế UI hiện đại, Dark/Light Mode linh hoạt |
-| **Build Tools** | Vite + Cargo | Tốc độ biên dịch và đóng gói siêu nhanh |
+## Yêu cầu môi trường
 
----
+- Node.js 18+
+- Rust toolchain (`rustup`, `cargo`)
+- Nền tảng chính: Windows (target hiện tại)
 
-## 🚀 Hướng Dẫn Cài Đặt & Phát Triển (Development)
+## Chạy dự án
 
-### Yêu cầu hệ thống:
-- [Node.js](https://nodejs.org/) (v18 trở lên)
-- [Rust & Cargo](https://rustup.rs/)
+```bash
+npm install
+npm run tauri dev
+```
 
-### Các bước cài đặt:
+## Build
 
-1. **Clone repository:**
-   ```bash
-   git clone https://github.com/NhatPrv/MCLauncher.git
-   cd MCLauncher
-   ```
+Frontend build:
 
-2. **Cài đặt các gói phụ thuộc (Dependencies):**
-   ```bash
-   npm install
-   ```
+```bash
+npm run build
+```
 
-3. **Chạy ứng dụng ở chế độ Development:**
-   ```bash
-   npm run tauri dev
-   ```
+Tauri build:
 
-4. **Đóng gói ứng dụng (Production Release Build):**
-   ```powershell
-   powershell ./scripts/build.ps1
-   ```
+```bash
+npm run tauri build
+```
 
----
+Tuỳ chọn script PowerShell:
 
-## 📜 Giấy Phép & Bản Quyền
+```powershell
+powershell ./scripts/build.ps1
+```
 
-Dự án được phát hành dưới giấy phép **MIT License**.
+## Cấu trúc thư mục
 
-Minecraft là thương hiệu thuộc sở hữu của **Mojang AB / Microsoft**. MCLauncher không liên kết trực tiếp với Mojang AB.
+- `/home/runner/work/MCLauncher/MCLauncher/src`: UI React
+- `/home/runner/work/MCLauncher/MCLauncher/src-tauri`: backend Rust + config Tauri
+- `/home/runner/work/MCLauncher/MCLauncher/public`: static assets
+- `/home/runner/work/MCLauncher/MCLauncher/docs`: tài liệu phân tích bổ sung
+
+## Lưu ý pháp lý
+
+Minecraft là thương hiệu thuộc sở hữu của Mojang AB/Microsoft. Dự án không liên kết chính thức với Mojang AB.
