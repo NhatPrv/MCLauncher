@@ -322,18 +322,17 @@ pub async fn ensure_asset_objects_downloaded(
             
             let is_missing = !target_path.exists() || fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0) == 0;
             if is_missing {
+                // Chỉ tải các file tối quan trọng để vượt qua LinkFS lúc khởi động game
                 let is_critical = name.starts_with("icons/")
+                    || name.starts_with("minecraft/textures/gui/title/")
                     || name.contains("font")
-                    || name.contains("lang")
-                    || name.contains("pack.mcmeta")
-                    || name.contains("pack.png")
-                    || name.contains("textures")
-                    || name.contains("high_contrast")
-                    || name.contains("programmer_art")
-                    || name.ends_with(".png")
-                    || name.ends_with(".json");
+                    || name.ends_with("en_us.json")
+                    || name == "pack.mcmeta"
+                    || name == "pack.png";
 
-                to_download.push((hash, target_path, is_critical));
+                if is_critical {
+                    to_download.push((hash, target_path, true));
+                }
             }
         }
 
@@ -940,20 +939,41 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
 
             let json_path = target_dir.join(format!("{}.json", version_id));
 
+            let known_forge = match target_mojang_ver {
+                "1.21.1" => Some("51.0.33"),
+                "1.20.4" => Some("49.0.38"),
+                "1.20.2" => Some("48.1.0"),
+                "1.20.1" => Some("47.3.0"),
+                "1.19.4" => Some("45.2.0"),
+                "1.19.2" => Some("43.3.0"),
+                "1.18.2" => Some("40.2.17"),
+                "1.16.5" => Some("36.2.39"),
+                "1.12.2" => Some("14.23.5.2860"),
+                "1.7.10" => Some("10.13.4.1614"),
+                _ => None,
+            };
+
             let actual_forge_ver = if loader_version == "latest" || loader_version.is_empty() {
-                if target_mojang_ver == "1.21.1" { "51.0.33" }
-                else if target_mojang_ver == "1.20.4" { "49.0.38" }
-                else if target_mojang_ver == "1.20.2" { "48.1.0" }
-                else if target_mojang_ver == "1.20.1" { "47.3.0" }
-                else if target_mojang_ver == "1.19.4" { "45.2.0" }
-                else if target_mojang_ver == "1.19.2" { "43.3.0" }
-                else if target_mojang_ver == "1.18.2" { "40.2.17" }
-                else if target_mojang_ver == "1.16.5" { "36.2.39" }
-                else if target_mojang_ver == "1.12.2" { "14.23.5.2860" }
-                else if target_mojang_ver == "1.7.10" { "10.13.4.1614" }
-                else { "51.0.33" }
+                match known_forge {
+                    Some(v) => v.to_string(),
+                    None => {
+                        let forge_list = crate::version_manifest::fetch_forge_versions(target_mojang_ver).await.unwrap_or_default();
+                        let found = forge_list.into_iter()
+                            .find(|s| !s.ends_with("-latest"))
+                            .and_then(|s| s.split('-').nth(1).map(|v| v.to_string()));
+                        match found {
+                            Some(v) => v,
+                            None => {
+                                return Err(format!(
+                                    "MinecraftForge hiện chưa hỗ trợ phiên bản Minecraft {}! Vui lòng chọn phiên bản chính thức được hỗ trợ (ví dụ: 1.20.1, 1.19.2, 1.16.5, 1.12.2, 1.21.1).",
+                                    target_mojang_ver
+                                ));
+                            }
+                        }
+                    }
+                }
             } else {
-                loader_version
+                loader_version.to_string()
             };
 
             let full_ver = format!("{}-{}", target_mojang_ver, actual_forge_ver);
@@ -982,6 +1002,13 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
                 if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
                     downloaded = true;
                 }
+            }
+
+            if !downloaded {
+                return Err(format!(
+                    "Không thể tải bộ cài MinecraftForge cho {} (phiên bản Forge: {})! Vui lòng kiểm tra lại kết nối mạng.",
+                    target_mojang_ver, actual_forge_ver
+                ));
             }
 
             if downloaded {

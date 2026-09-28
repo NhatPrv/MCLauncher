@@ -302,59 +302,76 @@ export function App() {
           releaseDate: v.releaseTime,
         }));
 
-        const fabricVariants: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-fabric`,
-          label: `${v.id} Fabric`,
-          sub: "Fabric Loader Latest",
-          loader: "fabric" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-fabric`, realDiskIds),
-        }));
+        const FORGE_SUPPORTED = ["1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.19.4", "1.19.3", "1.19.2", "1.18.2", "1.16.5", "1.12.2", "1.7.10"];
+        const NEOFORGE_SUPPORTED = ["1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2"];
+        const OPTIFINE_SUPPORTED = ["1.21.1", "1.20.4", "1.20.2", "1.20.1", "1.19.4", "1.19.2", "1.18.2", "1.16.5", "1.12.2"];
+        const IRIS_SUPPORTED = ["1.21.1", "1.21", "1.20.4", "1.20.1", "1.19.4", "1.19.2", "1.18.2", "1.16.5"];
 
-        const forgeVariants: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-forge`,
-          label: `${v.id} Forge`,
-          sub: "MinecraftForge Build",
-          loader: "forge" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-forge`, realDiskIds),
-        }));
+        const fabricVariants: VersionItem[] = releaseEntries
+          .filter((v: any) => v.id.startsWith("1.") || v.id.startsWith("2"))
+          .map((v: any) => ({
+            id: `${v.id}-fabric`,
+            label: `${v.id} Fabric`,
+            sub: "Fabric Loader Latest",
+            loader: "fabric" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-fabric`, realDiskIds),
+          }));
 
-        const optifineStandalone: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-optifine`,
-          label: `${v.id} OptiFine HD`,
-          sub: "OptiFine Standalone FPS Booster",
-          loader: "optifine" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-optifine`, realDiskIds),
-        }));
+        const forgeVariants: VersionItem[] = releaseEntries
+          .filter((v: any) => FORGE_SUPPORTED.includes(v.id))
+          .map((v: any) => ({
+            id: `${v.id}-forge`,
+            label: `${v.id} Forge`,
+            sub: "MinecraftForge Build",
+            loader: "forge" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-forge`, realDiskIds),
+          }));
 
-        const neoforgeVariants: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-neoforge`,
-          label: `${v.id} NeoForge`,
-          sub: "NeoForge Official Build",
-          loader: "neoforge" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-neoforge`, realDiskIds),
-        }));
+        const optifineStandalone: VersionItem[] = releaseEntries
+          .filter((v: any) => OPTIFINE_SUPPORTED.includes(v.id))
+          .map((v: any) => ({
+            id: `${v.id}-optifine`,
+            label: `${v.id} OptiFine HD`,
+            sub: "OptiFine Standalone FPS Booster",
+            loader: "optifine" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-optifine`, realDiskIds),
+          }));
 
-        const quiltVariants: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-quilt`,
-          label: `${v.id} Quilt`,
-          sub: "Quilt Loader Build",
-          loader: "quilt" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-quilt`, realDiskIds),
-        }));
+        const neoforgeVariants: VersionItem[] = releaseEntries
+          .filter((v: any) => NEOFORGE_SUPPORTED.includes(v.id))
+          .map((v: any) => ({
+            id: `${v.id}-neoforge`,
+            label: `${v.id} NeoForge`,
+            sub: "NeoForge Official Build",
+            loader: "neoforge" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-neoforge`, realDiskIds),
+          }));
 
-        const irisVariants: VersionItem[] = releaseEntries.map((v: any) => ({
-          id: `${v.id}-iris`,
-          label: `${v.id} Iris Shaders`,
-          sub: "Iris Shaders + Sodium Engine",
-          loader: "iris" as LoaderType,
-          versionStr: v.id,
-          isInstalled: isVersionInstalledOnDisk(`${v.id}-iris`, realDiskIds),
-        }));
+        const quiltVariants: VersionItem[] = releaseEntries
+          .filter((v: any) => v.id.startsWith("1.20") || v.id.startsWith("1.19") || v.id.startsWith("1.18"))
+          .map((v: any) => ({
+            id: `${v.id}-quilt`,
+            label: `${v.id} Quilt`,
+            sub: "Quilt Loader Build",
+            loader: "quilt" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-quilt`, realDiskIds),
+          }));
+
+        const irisVariants: VersionItem[] = releaseEntries
+          .filter((v: any) => IRIS_SUPPORTED.includes(v.id))
+          .map((v: any) => ({
+            id: `${v.id}-iris`,
+            label: `${v.id} Iris Shaders`,
+            sub: "Iris Shaders + Sodium Engine",
+            loader: "iris" as LoaderType,
+            versionStr: v.id,
+            isInstalled: isVersionInstalledOnDisk(`${v.id}-iris`, realDiskIds),
+          }));
 
         const predefinedList = [
           ...neoforgeVariants,
