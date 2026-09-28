@@ -223,13 +223,14 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
                         }
                     }
 
-                    // Tải asset index nếu có
+                    // Tải asset index và các asset objects cần thiết nếu có
                     if let Some(ref ai) = parsed.asset_index {
                         if let (Some(ref id), Some(ref url)) = (&ai.id, &ai.url) {
                             let index_file = base_path.join("assets").join("indexes").join(format!("{}.json", id));
                             if !index_file.exists() || fs::metadata(&index_file).map(|m| m.len()).unwrap_or(0) == 0 {
                                 let _ = verify_and_download_file(url, &index_file, ai.sha1.as_deref()).await;
                             }
+                            let _ = ensure_asset_objects_downloaded(&base_path, id).await;
                         }
                     }
 
@@ -278,6 +279,118 @@ pub async fn ensure_version_libraries_downloaded(game_dir: &str, version_id: &st
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct AssetIndexManifest {
+    objects: Option<std::collections::HashMap<String, AssetObjectEntry>>,
+}
+
+#[derive(Deserialize)]
+struct AssetObjectEntry {
+    hash: String,
+}
+
+pub async fn ensure_asset_objects_downloaded(
+    game_dir: &Path,
+    asset_index_id: &str,
+) -> Result<(), String> {
+    let index_file = game_dir.join("assets").join("indexes").join(format!("{}.json", asset_index_id));
+    if !index_file.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(&index_file).map_err(|e| e.to_string())?;
+    let manifest = serde_json::from_str::<AssetIndexManifest>(&content).map_err(|e| e.to_string())?;
+
+    if let Some(objects) = manifest.objects {
+        let objects_dir = game_dir.join("assets").join("objects");
+        let mut to_download = Vec::new();
+
+        for (name, entry) in objects {
+            let hash = entry.hash;
+            if hash.len() < 2 {
+                continue;
+            }
+            let sub = &hash[0..2];
+            let target_path = objects_dir.join(sub).join(&hash);
+            
+            let is_missing = !target_path.exists() || fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0) == 0;
+            if is_missing {
+                let is_critical = name.starts_with("icons/")
+                    || name.contains("font")
+                    || name.contains("lang")
+                    || name.contains("pack.mcmeta")
+                    || name.contains("pack.png")
+                    || name.contains("textures")
+                    || name.contains("high_contrast")
+                    || name.contains("programmer_art")
+                    || name.ends_with(".png")
+                    || name.ends_with(".json");
+
+                to_download.push((hash, target_path, is_critical));
+            }
+        }
+
+        if to_download.is_empty() {
+            return Ok(());
+        }
+
+        to_download.sort_by(|a, b| b.2.cmp(&a.2));
+
+        let client = reqwest::Client::builder()
+            .user_agent("MCLauncher/4.2.1")
+            .connect_timeout(std::time::Duration::from_secs(8))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_default();
+
+        let client = std::sync::Arc::new(client);
+
+        for chunk in to_download.chunks(30) {
+            let mut handles = Vec::new();
+            for (hash, target_path, _) in chunk {
+                let cl = client.clone();
+                let h = hash.clone();
+                let tp = target_path.clone();
+
+                handles.push(tokio::spawn(async move {
+                    if let Some(parent) = tp.parent() {
+                        fs::create_dir_all(parent).ok();
+                    }
+                    let sub = &h[0..2];
+                    let primary_url = format!("https://resources.download.minecraft.net/{}/{}", sub, h);
+                    let mirror_url = format!("https://bmclapi2.bangbang93.com/assets/{}/{}", sub, h);
+
+                    let mut ok = false;
+                    if let Ok(res) = cl.get(&primary_url).send().await {
+                        if res.status().is_success() {
+                            if let Ok(bytes) = res.bytes().await {
+                                if fs::write(&tp, &bytes).is_ok() {
+                                    ok = true;
+                                }
+                            }
+                        }
+                    }
+                    if !ok {
+                        if let Ok(res) = cl.get(&mirror_url).send().await {
+                            if res.status().is_success() {
+                                if let Ok(bytes) = res.bytes().await {
+                                    let _ = fs::write(&tp, &bytes);
+                                }
+                            }
+                        }
+                    }
+                }));
+            }
+
+            for handle in handles {
+                let _ = handle.await;
             }
         }
     }
