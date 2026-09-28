@@ -89,6 +89,65 @@ fn maven_to_url(maven_name: &str) -> Option<(String, PathBuf)> {
     Some((url, PathBuf::from(rel_path)))
 }
 
+pub async fn resolve_forge_version(game_version: &str, requested_loader_version: &str) -> Result<String, String> {
+    if !requested_loader_version.is_empty() && requested_loader_version != "latest" {
+        return Ok(requested_loader_version.to_string());
+    }
+
+    // 1. Tra cứu chính thức từ promotions_slim.json của MinecraftForge
+    let client = reqwest::Client::builder()
+        .user_agent("MCLauncher/4.2.1")
+        .timeout(std::time::Duration::from_secs(6))
+        .build()
+        .unwrap_or_default();
+
+    let promo_url = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
+    if let Ok(res) = client.get(promo_url).send().await {
+        if let Ok(json) = res.json::<serde_json::Value>().await {
+            if let Some(promos) = json.get("promos").and_then(|p| p.as_object()) {
+                let rec_key = format!("{}-recommended", game_version);
+                let latest_key = format!("{}-latest", game_version);
+                if let Some(ver) = promos.get(&latest_key).or_else(|| promos.get(&rec_key)).and_then(|v| v.as_str()) {
+                    return Ok(ver.to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Tra cứu từ BMCLAPI mirror
+    let bmcl_url = format!("https://bmclapi2.bangbang93.com/forge/minecraft/{}", game_version);
+    if let Ok(res) = client.get(&bmcl_url).send().await {
+        if let Ok(items) = res.json::<Vec<serde_json::Value>>().await {
+            if let Some(last_item) = items.last() {
+                if let Some(ver) = last_item.get("version").and_then(|v| v.as_str()) {
+                    return Ok(ver.to_string());
+                }
+            }
+        }
+    }
+
+    // 3. Fallback theo bảng chuẩn xác
+    match game_version {
+        "1.21.1" => Ok("52.1.16".to_string()),
+        "1.21"   => Ok("51.0.33".to_string()),
+        "1.20.6" => Ok("50.2.10".to_string()),
+        "1.20.4" => Ok("49.2.8".to_string()),
+        "1.20.2" => Ok("48.1.0".to_string()),
+        "1.20.1" => Ok("47.4.10".to_string()),
+        "1.20"   => Ok("46.0.14".to_string()),
+        "1.19.4" => Ok("45.2.0".to_string()),
+        "1.19.2" => Ok("43.3.0".to_string()),
+        "1.18.2" => Ok("40.2.17".to_string()),
+        "1.16.5" => Ok("36.2.39".to_string()),
+        "1.12.2" => Ok("14.23.5.2860".to_string()),
+        "1.7.10" => Ok("10.13.4.1614".to_string()),
+        _ => Err(format!(
+            "MinecraftForge hiện chưa hỗ trợ phiên bản Minecraft {}! Vui lòng chọn phiên bản chính thức được hỗ trợ (ví dụ: 1.21.1, 1.20.1, 1.19.2, 1.16.5, 1.12.2).",
+            game_version
+        )),
+    }
+}
+
 pub async fn ensure_fabric_loader_jar(game_dir: &str, loader_version: &str) -> Result<(), String> {
     let loader_vers = vec![
         if loader_version == "latest" || loader_version.is_empty() { "0.16.10" } else { loader_version },
@@ -939,50 +998,22 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
 
             let json_path = target_dir.join(format!("{}.json", version_id));
 
-            let known_forge = match target_mojang_ver {
-                "1.21.1" => Some("51.0.33"),
-                "1.20.4" => Some("49.0.38"),
-                "1.20.2" => Some("48.1.0"),
-                "1.20.1" => Some("47.3.0"),
-                "1.19.4" => Some("45.2.0"),
-                "1.19.2" => Some("43.3.0"),
-                "1.18.2" => Some("40.2.17"),
-                "1.16.5" => Some("36.2.39"),
-                "1.12.2" => Some("14.23.5.2860"),
-                "1.7.10" => Some("10.13.4.1614"),
-                _ => None,
-            };
-
-            let actual_forge_ver = if loader_version == "latest" || loader_version.is_empty() {
-                match known_forge {
-                    Some(v) => v.to_string(),
-                    None => {
-                        let forge_list = crate::version_manifest::fetch_forge_versions(target_mojang_ver).await.unwrap_or_default();
-                        let found = forge_list.into_iter()
-                            .find(|s| !s.ends_with("-latest"))
-                            .and_then(|s| s.split('-').nth(1).map(|v| v.to_string()));
-                        match found {
-                            Some(v) => v,
-                            None => {
-                                return Err(format!(
-                                    "MinecraftForge hiện chưa hỗ trợ phiên bản Minecraft {}! Vui lòng chọn phiên bản chính thức được hỗ trợ (ví dụ: 1.20.1, 1.19.2, 1.16.5, 1.12.2, 1.21.1).",
-                                    target_mojang_ver
-                                ));
-                            }
-                        }
-                    }
-                }
-            } else {
-                loader_version.to_string()
+            let actual_forge_ver = match resolve_forge_version(target_mojang_ver, loader_version).await {
+                Ok(v) => v,
+                Err(e) => return Err(e),
             };
 
             let full_ver = format!("{}-{}", target_mojang_ver, actual_forge_ver);
+            let primary_url = format!(
+                "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
+                full_ver, full_ver
+            );
             let mirror_url = format!(
                 "https://bmclapi2.bangbang93.com/forge/download?mcversion={}&version={}&category=installer&format=jar",
                 target_mojang_ver, actual_forge_ver
             );
-            let primary_url = format!(
-                "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
+            let mirror_maven_url = format!(
+                "https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/{}/forge-{}-installer.jar",
                 full_ver, full_ver
             );
 
@@ -990,15 +1021,35 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             let display_name = format!("Forge {}", full_ver);
             
             let mut downloaded = false;
+            // 1. Thử tải qua Maven Cloudflare chính thức trước
             if let Some(app) = app_handle {
-                let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+                let _ = download_file_with_progress(app, &primary_url, &temp_installer, &display_name).await;
             } else {
-                let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+                let _ = verify_and_download_file(&primary_url, &temp_installer, None).await;
             }
             if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
                 downloaded = true;
-            } else {
-                let _ = verify_and_download_file(&primary_url, &temp_installer, None).await;
+            }
+
+            // 2. Fallback sang mirror BMCLAPI nếu cần
+            if !downloaded {
+                if let Some(app) = app_handle {
+                    let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+                } else {
+                    let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+                }
+                if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                    downloaded = true;
+                }
+            }
+
+            // 3. Fallback sang mirror Maven BMCLAPI
+            if !downloaded {
+                if let Some(app) = app_handle {
+                    let _ = download_file_with_progress(app, &mirror_maven_url, &temp_installer, &display_name).await;
+                } else {
+                    let _ = verify_and_download_file(&mirror_maven_url, &temp_installer, None).await;
+                }
                 if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
                     downloaded = true;
                 }
