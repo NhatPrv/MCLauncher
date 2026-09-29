@@ -124,31 +124,47 @@ fn substitute_placeholders(input: &str, vars: &HashMap<&str, &str>) -> String {
     result
 }
 
-fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
-    let mut versions_to_check = vec![
-        version_id.to_string(),
-        version_id.split('-').next().unwrap_or(version_id).to_string(),
-    ];
-    let mut checked_set = std::collections::HashSet::new();
-    while let Some(ver) = versions_to_check.pop() {
-        if !checked_set.insert(ver.clone()) {
-            continue;
+fn get_manifest_chain(game_dir: &Path, version_id: &str) -> Vec<VersionManifestJson> {
+    let mut chain = Vec::new();
+    let mut current_id = version_id.to_string();
+    let mut visited = std::collections::HashSet::new();
+
+    loop {
+        if !visited.insert(current_id.clone()) {
+            break;
         }
-        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
-        if json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&json_path) {
-                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
-                    if let Some(mc) = parsed.main_class {
-                        if !mc.trim().is_empty() {
-                            return mc;
-                        }
-                    }
-                    if let Some(parent_ver) = parsed.inherits_from {
-                        if !parent_ver.trim().is_empty() {
-                            versions_to_check.push(parent_ver);
-                        }
+        let json_path = game_dir.join("versions").join(&current_id).join(format!("{}.json", current_id));
+        if !json_path.exists() {
+            let base_ver = current_id.split('-').next().unwrap_or(&current_id).to_string();
+            if base_ver != current_id && !visited.contains(&base_ver) {
+                current_id = base_ver;
+                continue;
+            }
+            break;
+        }
+        if let Ok(content) = fs::read_to_string(&json_path) {
+            if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
+                let parent_opt = parsed.inherits_from.clone();
+                chain.push(parsed);
+                if let Some(parent) = parent_opt {
+                    if !parent.trim().is_empty() {
+                        current_id = parent;
+                        continue;
                     }
                 }
+            }
+        }
+        break;
+    }
+
+    chain
+}
+
+fn get_main_class_for_version(chain: &[VersionManifestJson]) -> String {
+    for manifest in chain {
+        if let Some(ref mc) = manifest.main_class {
+            if !mc.trim().is_empty() {
+                return mc.clone();
             }
         }
     }
@@ -156,91 +172,46 @@ fn get_main_class_for_version(game_dir: &Path, version_id: &str) -> String {
 }
 
 fn get_manifest_arguments(
-    game_dir: &Path,
-    version_id: &str,
+    chain: &[VersionManifestJson],
 ) -> (Vec<String>, Vec<String>, Option<String>) {
     let mut jvm_args = Vec::new();
     let mut game_args = Vec::new();
     let mut legacy_args = None;
 
-    let mut versions_to_check = vec![
-        version_id.to_string(),
-        version_id.split('-').next().unwrap_or(version_id).to_string(),
-    ];
-    let mut checked_set = std::collections::HashSet::new();
-
-    while let Some(ver) = versions_to_check.pop() {
-        if !checked_set.insert(ver.clone()) {
-            continue;
-        }
-        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
-        if json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&json_path) {
-                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
-                    if let Some(ref args) = parsed.arguments {
-                        if let Some(ref jvm_list) = args.jvm {
-                            for item in jvm_list {
-                                jvm_args.extend(extract_arg_values(item));
-                            }
-                        }
-                        if game_args.is_empty() {
-                            if let Some(ref game_list) = args.game {
-                                for item in game_list {
-                                    game_args.extend(extract_arg_values(item));
-                                }
-                            }
-                        }
-                    }
-                    if legacy_args.is_none() {
-                        if let Some(ref mc_args) = parsed.minecraft_arguments {
-                            legacy_args = Some(mc_args.clone());
-                        }
-                    }
-                    if let Some(parent_ver) = parsed.inherits_from {
-                        if !parent_ver.trim().is_empty() {
-                            versions_to_check.push(parent_ver);
-                        }
-                    }
+    // Duyệt từ gốc (Parent Vanilla) đến ngọn (Child ModLoader) để gom đủ và đúng thứ tự tham số
+    for manifest in chain.iter().rev() {
+        if let Some(ref args) = manifest.arguments {
+            if let Some(ref jvm_list) = args.jvm {
+                for item in jvm_list {
+                    jvm_args.extend(extract_arg_values(item));
                 }
             }
+            if let Some(ref game_list) = args.game {
+                for item in game_list {
+                    game_args.extend(extract_arg_values(item));
+                }
+            }
+        }
+        if let Some(ref mc_args) = manifest.minecraft_arguments {
+            legacy_args = Some(mc_args.clone());
         }
     }
 
     (jvm_args, game_args, legacy_args)
 }
 
-fn get_asset_index_for_version(game_dir: &Path, version_id: &str) -> String {
-    let mut versions_to_check = vec![
-        version_id.to_string(),
-        version_id.split('-').next().unwrap_or(version_id).to_string(),
-    ];
-    let mut checked_set = std::collections::HashSet::new();
-    while let Some(ver) = versions_to_check.pop() {
-        if !checked_set.insert(ver.clone()) {
-            continue;
-        }
-        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
-        if json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&json_path) {
-                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
-                    if let Some(ref ai) = parsed.asset_index {
-                        if let Some(ref id) = ai.id {
-                            if !id.trim().is_empty() {
-                                return id.clone();
-                            }
-                        }
-                    }
-                    if let Some(ref a) = parsed.assets {
-                        if !a.trim().is_empty() {
-                            return a.clone();
-                        }
-                    }
-                    if let Some(parent_ver) = parsed.inherits_from {
-                        if !parent_ver.trim().is_empty() {
-                            versions_to_check.push(parent_ver);
-                        }
-                    }
+fn get_asset_index_for_version(chain: &[VersionManifestJson], version_id: &str) -> String {
+    for manifest in chain {
+        if let Some(ref ai) = manifest.asset_index {
+            if let Some(ref id) = ai.id {
+                if !id.trim().is_empty() {
+                    return id.clone();
                 }
+            }
+        }
+        if let Some(ref a) = manifest.assets {
+            if !a.trim().is_empty() {
+                return a.clone();
             }
         }
     }
@@ -303,52 +274,31 @@ fn collect_jars_recursive(dir: &Path, jar_paths: &mut Vec<String>) {
 }
 
 /// Thu thập danh sách Classpath chuẩn mực từ JSON Manifest của phiên bản game
-fn collect_libraries_for_version(game_dir: &Path, version_id: &str) -> Vec<String> {
+fn collect_libraries_for_version(chain: &[VersionManifestJson], game_dir: &Path) -> Vec<String> {
     let libraries_dir = game_dir.join("libraries");
     let mut manifest_jars = Vec::new();
 
-    let mut versions_to_check = vec![
-        version_id.to_string(),
-        version_id.split('-').next().unwrap_or(version_id).to_string(),
-    ];
-
-    // 1. Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON (hỗ trợ kế thừa inheritsFrom)
-    let mut checked_set = std::collections::HashSet::new();
-    while let Some(ver) = versions_to_check.pop() {
-        if !checked_set.insert(ver.clone()) {
-            continue;
-        }
-        let json_path = game_dir.join("versions").join(&ver).join(format!("{}.json", ver));
-        if json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&json_path) {
-                if let Ok(parsed) = serde_json::from_str::<VersionManifestJson>(&content) {
-                    if let Some(parent_ver) = parsed.inherits_from {
-                        if !parent_ver.trim().is_empty() {
-                            versions_to_check.push(parent_ver);
+    // Nạp tất cả libraries từ cả Mod Loader JSON lẫn Vanilla JSON (hỗ trợ kế thừa inheritsFrom)
+    for manifest in chain {
+        if let Some(ref libs) = manifest.libraries {
+            for lib_item in libs {
+                let mut resolved_path = None;
+                if let Some(ref downloads) = lib_item.downloads {
+                    if let Some(ref artifact) = downloads.artifact {
+                        if let Some(ref p) = artifact.path {
+                            resolved_path = Some(PathBuf::from(p));
                         }
                     }
-                    if let Some(libs) = parsed.libraries {
-                        for lib_item in libs {
-                            let mut resolved_path = None;
-                            if let Some(ref downloads) = lib_item.downloads {
-                                if let Some(ref artifact) = downloads.artifact {
-                                    if let Some(ref p) = artifact.path {
-                                        resolved_path = Some(PathBuf::from(p));
-                                    }
-                                }
-                            }
-                            if resolved_path.is_none() {
-                                if let Some(ref maven_name) = lib_item.name {
-                                    resolved_path = maven_to_local_path(maven_name);
-                                }
-                            }
-                            if let Some(rel_path) = resolved_path {
-                                let full_jar = libraries_dir.join(rel_path);
-                                if full_jar.exists() {
-                                    manifest_jars.push(full_jar.to_string_lossy().to_string());
-                                }
-                            }
-                        }
+                }
+                if resolved_path.is_none() {
+                    if let Some(ref maven_name) = lib_item.name {
+                        resolved_path = maven_to_local_path(maven_name);
+                    }
+                }
+                if let Some(rel_path) = resolved_path {
+                    let full_jar = libraries_dir.join(rel_path);
+                    if full_jar.exists() {
+                        manifest_jars.push(full_jar.to_string_lossy().to_string());
                     }
                 }
             }
@@ -499,9 +449,11 @@ pub fn launch_game(
     let natives_dir = extract_natives(&game_dir, version_id);
     let natives_path_str = natives_dir.to_string_lossy().to_string();
 
+    let manifest_chain = get_manifest_chain(&game_dir, version_id);
+
     // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
     let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
-    let version_libs = collect_libraries_for_version(&game_dir, version_id);
+    let version_libs = collect_libraries_for_version(&manifest_chain, &game_dir);
     jar_list.extend(version_libs);
 
     let mut final_jars = jar_list;
@@ -514,27 +466,19 @@ pub fn launch_game(
         eprintln!("  CP: {}", j);
     }
 
-    final_jars.sort();
-
-    // Debug: log classpath để phát hiện lỗi thiếu thư viện
-    eprintln!("[MCLauncher DEBUG] Classpath entries ({} jars):", final_jars.len());
-    for j in &final_jars {
-        eprintln!("  CP: {}", j);
-    }
-
     // Classpath construction
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
     let classpath = final_jars.join(cp_separator);
 
     let vanilla_version_str = version_id.split('-').next().unwrap_or(version_id);
-    let main_class_to_run = get_main_class_for_version(&game_dir, version_id);
+    let main_class_to_run = get_main_class_for_version(&manifest_chain);
     let game_dir_to_use = if version_dir.exists() {
         version_dir.to_string_lossy().to_string()
     } else {
         game_dir.to_string_lossy().to_string()
     };
 
-    let asset_index_to_use = get_asset_index_for_version(&game_dir, version_id);
+    let asset_index_to_use = get_asset_index_for_version(&manifest_chain, version_id);
     let assets_dir_str = assets_dir.to_string_lossy().to_string();
     let libraries_dir_str = game_dir.join("libraries").to_string_lossy().to_string();
     let width_str = config.resolution_width.to_string();
@@ -564,7 +508,7 @@ pub fn launch_game(
     placeholder_vars.insert("auth_xuid", "");
 
     let (manifest_jvm_args, manifest_game_args, legacy_mc_args) =
-        get_manifest_arguments(&game_dir, version_id);
+        get_manifest_arguments(&manifest_chain);
 
     let mut args: Vec<String> = vec![
         min_ram_arg,
