@@ -298,7 +298,12 @@ fn collect_libraries_for_version(chain: &[VersionManifestJson], game_dir: &Path)
                 if let Some(rel_path) = resolved_path {
                     let full_jar = libraries_dir.join(rel_path);
                     if full_jar.exists() {
-                        manifest_jars.push(full_jar.to_string_lossy().to_string());
+                        let path_str = if cfg!(windows) {
+                            full_jar.to_string_lossy().replace('/', "\\")
+                        } else {
+                            full_jar.to_string_lossy().to_string()
+                        };
+                        manifest_jars.push(path_str);
                     }
                 }
             }
@@ -451,12 +456,47 @@ pub fn launch_game(
 
     let manifest_chain = get_manifest_chain(&game_dir, version_id);
 
-    // Thu thập danh sách Classpath chính xác 100% từ JSON Manifest của phiên bản game
-    let mut jar_list = vec![actual_jar.to_string_lossy().to_string()];
+    let actual_jar_str = if cfg!(windows) {
+        actual_jar.to_string_lossy().replace('/', "\\")
+    } else {
+        actual_jar.to_string_lossy().to_string()
+    };
+    let mut jar_list = vec![actual_jar_str];
     let version_libs = collect_libraries_for_version(&manifest_chain, &game_dir);
     jar_list.extend(version_libs);
 
-    let mut final_jars = jar_list;
+    // Đảm bảo forge-*-client.jar luôn có mặt trong classpath nếu đây là phiên bản Forge
+    if version_id.contains("forge") {
+        let forge_base = game_dir.join("libraries").join("net").join("minecraftforge").join("forge");
+        if forge_base.exists() {
+            if let Ok(entries) = fs::read_dir(&forge_base) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        if let Ok(sub_entries) = fs::read_dir(entry.path()) {
+                            for sub in sub_entries.flatten() {
+                                let sub_p = sub.path();
+                                if let Some(fname) = sub_p.file_name().and_then(|s| s.to_str()) {
+                                    if fname.ends_with("-client.jar") {
+                                        let c_str = if cfg!(windows) {
+                                            sub_p.to_string_lossy().replace('/', "\\")
+                                        } else {
+                                            sub_p.to_string_lossy().to_string()
+                                        };
+                                        jar_list.push(c_str);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut final_jars = jar_list
+        .into_iter()
+        .map(|j| if cfg!(windows) { j.replace('/', "\\") } else { j })
+        .collect::<Vec<_>>();
     final_jars.sort();
     final_jars.dedup();
 

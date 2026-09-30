@@ -994,7 +994,6 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             let version_id = format!("{}-forge-{}", game_version, loader_version);
             let target_dir = versions_dir.join(&version_id);
             fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
-            let _ = ensure_bundle_version_files(app_handle, game_dir, &target_dir, game_version, &version_id).await;
 
             let json_path = target_dir.join(format!("{}.json", version_id));
 
@@ -1004,6 +1003,38 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             };
 
             let full_ver = format!("{}-{}", target_mojang_ver, actual_forge_ver);
+            let libraries_dir = PathBuf::from(game_dir).join("libraries");
+            let forge_client_jar = libraries_dir
+                .join("net")
+                .join("minecraftforge")
+                .join("forge")
+                .join(&full_ver)
+                .join(format!("forge-{}-client.jar", full_ver));
+
+            // 1. Kiểm tra nếu phiên bản Forge đã được cài đặt hoàn chỉnh trước đó (json > 1KB và forge_client_jar > 20MB)
+            let is_already_installed = json_path.exists()
+                && fs::metadata(&json_path).map(|m| m.len()).unwrap_or(0) > 1000
+                && forge_client_jar.exists()
+                && fs::metadata(&forge_client_jar).map(|m| m.len()).unwrap_or(0) > 20_000_000;
+
+            if is_already_installed {
+                let client_ver_jar = target_dir.join(format!("{}.jar", version_id));
+                if !client_ver_jar.exists() || fs::metadata(&client_ver_jar).map(|m| m.len()).unwrap_or(0) < 20_000_000 {
+                    let _ = fs::copy(&forge_client_jar, &client_ver_jar);
+                }
+                let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;
+                return Ok(version_id);
+            }
+
+            // 2. Đảm bảo file vanilla client jar của Mojang đã sẵn sàng
+            let _ = ensure_vanilla_version(game_dir, target_mojang_ver).await;
+
+            // 3. Đảm bảo file launcher_profiles.json tồn tại để Forge installer không báo lỗi
+            let launcher_profiles = PathBuf::from(game_dir).join("launcher_profiles.json");
+            if !launcher_profiles.exists() {
+                let _ = fs::write(&launcher_profiles, "{\"profiles\":{}}");
+            }
+
             let primary_url = format!(
                 "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
                 full_ver, full_ver
@@ -1020,38 +1051,40 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
             let temp_installer = target_dir.join(format!("forge-{}-installer.jar", actual_forge_ver));
             let display_name = format!("Forge {}", full_ver);
             
-            let mut downloaded = false;
-            // 1. Thử tải qua Maven Cloudflare chính thức trước
-            if let Some(app) = app_handle {
-                let _ = download_file_with_progress(app, &primary_url, &temp_installer, &display_name).await;
-            } else {
-                let _ = verify_and_download_file(&primary_url, &temp_installer, None).await;
-            }
-            if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
-                downloaded = true;
-            }
-
-            // 2. Fallback sang mirror BMCLAPI nếu cần
+            let mut downloaded = temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 1_000_000;
             if !downloaded {
+                // 1. Thử tải qua Maven Cloudflare chính thức trước
                 if let Some(app) = app_handle {
-                    let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+                    let _ = download_file_with_progress(app, &primary_url, &temp_installer, &display_name).await;
                 } else {
-                    let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+                    let _ = verify_and_download_file(&primary_url, &temp_installer, None).await;
                 }
                 if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
                     downloaded = true;
                 }
-            }
 
-            // 3. Fallback sang mirror Maven BMCLAPI
-            if !downloaded {
-                if let Some(app) = app_handle {
-                    let _ = download_file_with_progress(app, &mirror_maven_url, &temp_installer, &display_name).await;
-                } else {
-                    let _ = verify_and_download_file(&mirror_maven_url, &temp_installer, None).await;
+                // 2. Fallback sang mirror BMCLAPI nếu cần
+                if !downloaded {
+                    if let Some(app) = app_handle {
+                        let _ = download_file_with_progress(app, &mirror_url, &temp_installer, &display_name).await;
+                    } else {
+                        let _ = verify_and_download_file(&mirror_url, &temp_installer, None).await;
+                    }
+                    if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                        downloaded = true;
+                    }
                 }
-                if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
-                    downloaded = true;
+
+                // 3. Fallback sang mirror Maven BMCLAPI
+                if !downloaded {
+                    if let Some(app) = app_handle {
+                        let _ = download_file_with_progress(app, &mirror_maven_url, &temp_installer, &display_name).await;
+                    } else {
+                        let _ = verify_and_download_file(&mirror_maven_url, &temp_installer, None).await;
+                    }
+                    if temp_installer.exists() && fs::metadata(&temp_installer).map(|m| m.len()).unwrap_or(0) > 100_000 {
+                        downloaded = true;
+                    }
                 }
             }
 
@@ -1062,37 +1095,47 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
                 ));
             }
 
-            if downloaded {
-                if let Ok(file) = File::open(&temp_installer) {
-                    if let Ok(mut archive) = ZipArchive::new(file) {
-                        for i in 0..archive.len() {
-                            if let Ok(mut entry) = archive.by_index(i) {
-                                if let Some(enclosed) = entry.enclosed_name() {
-                                    let name_str = enclosed.to_string_lossy().to_string();
-                                    if name_str == "version.json" {
-                                        let mut content = String::new();
-                                        if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
-                                            let _ = fs::write(&json_path, &content);
-                                        }
-                                    } else if name_str == "install_profile.json" {
-                                        let mut content = String::new();
-                                        if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
-                                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
-                                                if let Some(v_info) = v.get("versionInfo").or_else(|| v.get("install").and_then(|i| i.get("versionInfo"))) {
-                                                    let _ = fs::write(&json_path, serde_json::to_string_pretty(v_info).unwrap_or_default());
-                                                }
+            // 4. Chạy installer headless của Forge để sinh ra forge-{ver}-client.jar
+            if !forge_client_jar.exists() || fs::metadata(&forge_client_jar).map(|m| m.len()).unwrap_or(0) < 20_000_000 {
+                let java_bin = crate::config::detect_java_path().unwrap_or_else(|| "java".to_string());
+                let _ = std::process::Command::new(&java_bin)
+                    .arg("-jar")
+                    .arg(&temp_installer)
+                    .arg("--installClient")
+                    .arg(game_dir)
+                    .status();
+            }
+
+            // 5. Trích xuất file json và thư viện từ installer nếu cần
+            if let Ok(file) = File::open(&temp_installer) {
+                if let Ok(mut archive) = ZipArchive::new(file) {
+                    for i in 0..archive.len() {
+                        if let Ok(mut entry) = archive.by_index(i) {
+                            if let Some(enclosed) = entry.enclosed_name() {
+                                let name_str = enclosed.to_string_lossy().to_string();
+                                if name_str == "version.json" {
+                                    let mut content = String::new();
+                                    if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                        let _ = fs::write(&json_path, &content);
+                                    }
+                                } else if name_str == "install_profile.json" && (!json_path.exists() || fs::metadata(&json_path).map(|m| m.len()).unwrap_or(0) == 0) {
+                                    let mut content = String::new();
+                                    if std::io::Read::read_to_string(&mut entry, &mut content).is_ok() {
+                                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                                            if let Some(v_info) = v.get("versionInfo").or_else(|| v.get("install").and_then(|i| i.get("versionInfo"))) {
+                                                let _ = fs::write(&json_path, serde_json::to_string_pretty(v_info).unwrap_or_default());
                                             }
                                         }
-                                    } else if name_str.starts_with("maven/") {
-                                        let rel_lib = name_str.trim_start_matches("maven/");
-                                        let target_lib_path = PathBuf::from(game_dir).join("libraries").join(rel_lib);
-                                        if !target_lib_path.exists() {
-                                            if let Some(parent) = target_lib_path.parent() {
-                                                let _ = fs::create_dir_all(parent);
-                                            }
-                                            if let Ok(mut out) = File::create(&target_lib_path) {
-                                                let _ = std::io::copy(&mut entry, &mut out);
-                                            }
+                                    }
+                                } else if name_str.starts_with("maven/") {
+                                    let rel_lib = name_str.trim_start_matches("maven/");
+                                    let target_lib_path = PathBuf::from(game_dir).join("libraries").join(rel_lib);
+                                    if !target_lib_path.exists() {
+                                        if let Some(parent) = target_lib_path.parent() {
+                                            let _ = fs::create_dir_all(parent);
+                                        }
+                                        if let Ok(mut out) = File::create(&target_lib_path) {
+                                            let _ = std::io::copy(&mut entry, &mut out);
                                         }
                                     }
                                 }
@@ -1100,6 +1143,12 @@ pub async fn install_mod_loader<R: tauri::Runtime>(
                         }
                     }
                 }
+            }
+
+            // 6. Đồng bộ client jar sang target_dir
+            if forge_client_jar.exists() {
+                let client_ver_jar = target_dir.join(format!("{}.jar", version_id));
+                let _ = fs::copy(&forge_client_jar, &client_ver_jar);
             }
 
             let _ = ensure_version_libraries_downloaded(game_dir, &version_id).await;

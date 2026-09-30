@@ -577,10 +577,32 @@ export function App() {
         setAccount(acc);
         setAccountsList((prev) => [acc!, ...prev]);
       }
+
       let vid = selectedVersion.versionStr;
       if (selectedVersion.loader !== "vanilla") {
-        vid = await invoke<string>("install_mod_loader_cmd", { gameDir: config.game_dir, gameVersion: selectedVersion.versionStr, loaderName: selectedVersion.loader, loaderVersion: "latest" });
+        if (!selectedVersion.isInstalled) {
+          vid = await invoke<string>("install_mod_loader_cmd", {
+            gameDir: config.game_dir,
+            gameVersion: selectedVersion.versionStr,
+            loaderName: selectedVersion.loader,
+            loaderVersion: "latest",
+          });
+        } else {
+          // Phiên bản đã có sẵn trên đĩa -> lấy trực tiếp ID thư mục phiên bản tương ứng
+          const matchDiskId = installedDiskVersionIds.find(
+            (id) =>
+              id === selectedVersion.id ||
+              id === `${selectedVersion.id}-latest` ||
+              id === `${selectedVersion.versionStr}-${selectedVersion.loader}-latest` ||
+              id.startsWith(`${selectedVersion.versionStr}-${selectedVersion.loader}`)
+          );
+          vid = matchDiskId || selectedVersion.id;
+        }
+      } else {
+        const matchDiskId = installedDiskVersionIds.find((id) => id === selectedVersion.id);
+        vid = matchDiskId || selectedVersion.id;
       }
+
       await invoke<number>("launch_minecraft", { versionId: vid, account: acc, config });
       setTimeout(() => setIsLaunching(false), 2500);
     } catch (err: any) {
